@@ -36,6 +36,12 @@ const onlyArg = process.argv.find((a) => a.startsWith('--only='));
 const ONLY = onlyArg ? onlyArg.slice('--only='.length).split(',').map((s) => s.trim().toUpperCase()) : null;
 const ALLOW_FALLBACK = process.argv.includes('--allow-fallback-font');
 const KEYS = process.argv.includes('--keys');
+// Screenshot the hover link: the lane hover stays on for the shot instead of
+// being cleared before it, so the shot shows what the pointer sees.
+const KEEP_HOVER = process.argv.includes('--keep-hover');
+// Screenshot in a named theme. Both themes carry the design, so both are worth
+// a look; the toggle is idempotent per run, so the profile cannot drift.
+const THEME = (process.argv.find((a) => a.startsWith('--theme=')) || '').slice('--theme='.length) || null;
 
 // rows, algorithm, viewport, drawer state
 const CASES = [
@@ -51,6 +57,8 @@ const CASES = [
     { id: 'J', rows: 0, algorithm: 'fcfs', width: 1024, height: 768, shut: false },
     { id: 'K', rows: 6, algorithm: 'fcfs', width: 1024, height: 620, shut: false },
     { id: 'L', rows: 1, algorithm: 'fcfs', width: 1440, height: 900, shut: false },
+    // M stops the cursor mid-run: the row and the lanes must still share a scale.
+    { id: 'M', rows: 6, algorithm: 'fcfs', width: 1440, height: 900, shut: false, cursor: 9 },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -80,7 +88,14 @@ function setupScript(c) {
   }
   $('#algorithm').value = '${c.algorithm}';
   $('#algorithm').dispatchEvent(new Event('change', { bubbles: true }));
+  window.__keepHover = ${KEEP_HOVER};
+  ${THEME ? `if (document.documentElement.dataset.theme !== '${THEME}') $('#theme-toggle').click();` : ''}
   $('#run-simulation').click();
+  if (${c.cursor ?? -1} >= 0) {
+    const scrub = $('#time-scrubber');
+    scrub.value = String(${c.cursor ?? 0});
+    scrub.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   const drawer = $('#history-drawer');
   if (drawer.classList.contains('is-collapsed') !== ${c.shut}) $('#history-toggle').click();
   window.__setup = {
@@ -150,9 +165,48 @@ const PROBE = `(() => {
     .map((th) => th.textContent.trim());
   out.averagesVisible = box($('#results-averages')).bottom <= box(opane).bottom + 1;
   out.pageOverflowX = document.documentElement.scrollWidth - innerWidth;
+  // The lanes share the CPU row's time axis: tick 0 of the first lane sits under
+  // tick 0 of the row and both tracks span the same width, or the column stops
+  // reading as one axis.
+  const gantt = $('#gantt-chart');
+  const gRow = $('#gantt-bars');
+  const gLane = $('#gantt-lanes .lane__track');
+  out.ganttOverflowX = gantt.scrollWidth - gantt.clientWidth;
+  const gLanesBox = $('#gantt-lanes');
+  out.lanesOverflowX = gLanesBox ? gLanesBox.scrollWidth - gLanesBox.clientWidth : 0;
+  out.ganttAlignX = gLane ? box(gLane).x - box(gRow).x : null;
+  out.ganttAlignW = gLane ? box(gLane).w - box(gRow).w : null;
+  out.ganttAxisTicks = gLane ? $('#gantt-lanes .lane__track--axis').children.length : 0;
+  // A process's lane bar must start where that same process's bar starts in the
+  // CPU row, whatever the cursor is: one time axis, or the column lies.
+  out.ganttBarOffsets = [...document.querySelectorAll('#gantt-lanes .lane')]
+    .filter((lane) => lane.querySelector('.lane__bar'))
+    .map((lane) => {
+      const pid = lane.querySelector('.lane__name').textContent.trim();
+      const rowBar = [...document.querySelectorAll('#gantt-bars .gantt__bar')]
+        .find((bar) => bar.textContent.trim() === pid);
+      return [pid, rowBar ? Math.round(lane.querySelector('.lane__bar').getBoundingClientRect().left
+        - rowBar.getBoundingClientRect().left) : null];
+    });
   out.drawerShut = $('#history-drawer').classList.contains('is-collapsed');
   out.drawerH = box($('#history-drawer')).h;
   out.setup = window.__setup || null;
+  // Hovering a lane must light that one process everywhere. The highlight keys
+  // off the process's position, never the colour slot, which wraps at eight.
+  const lane = $('#gantt-lanes .lane');
+  if (lane) {
+    out.hoverPid = lane.querySelector('.lane__name').textContent.trim();
+    lane.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    const hot = [...document.querySelectorAll('.is-hot')];
+    out.hoverHotCount = hot.length;
+    out.hoverKeys = [...new Set(hot.map((el) => el.dataset.processKey))];
+    out.hoverReadout = ($('#lane-readout') || { textContent: '' }).textContent.trim();
+    // The shot mode keeps the light on, to photograph the state.
+    if (!window.__keepHover) {
+      $('#gantt-lanes').dispatchEvent(new MouseEvent('mouseleave'));
+      out.hoverAfterLeave = document.querySelectorAll('.is-hot').length;
+    }
+  }
   return out;
 })()`;
 
@@ -174,6 +228,27 @@ function check(r, c) {
     numeric('resultsOverflowX', r.resultsOverflowX, r.resultsOverflowX <= 0);
     want('resultsColsCut', r.resultsColsCut.length === 0, r.resultsColsCut.join(','));
     want('averagesVisible', r.averagesVisible === true, r.averagesVisible);
+    numeric('ganttOverflowX', r.ganttOverflowX, r.ganttOverflowX <= 0);
+    numeric('lanesOverflowX', r.lanesOverflowX, r.lanesOverflowX <= 0);
+    if (r.ganttAlignX !== null) {
+        numeric('ganttAlignX', r.ganttAlignX, Math.abs(r.ganttAlignX) <= 1);
+        numeric('ganttAlignW', r.ganttAlignW, Math.abs(r.ganttAlignW) <= 1);
+        want('ganttAxisTicks', r.ganttAxisTicks >= 2, r.ganttAxisTicks);
+        const off = r.ganttBarOffsets.filter(([, dx]) => dx === null || Math.abs(dx) > 1);
+        want('ganttBarOffsets', off.length === 0, off.map(([pid, dx]) => `${pid}:${dx}`).join(' '));
+    }
+    if (r.hoverHotCount !== undefined) {
+        want('hoverKeysMixed', r.hoverKeys.length === 1, r.hoverKeys.join(','));
+        want('hoverFanout', r.hoverHotCount >= 4, r.hoverHotCount);
+        want('hoverReadout', r.hoverReadout.startsWith(`${r.hoverPid} \u00b7 `), r.hoverReadout);
+        // Unset in --keep-hover: the light is deliberately left on for the shot.
+        if (r.hoverAfterLeave !== undefined) {
+            numeric('hoverAfterLeave', r.hoverAfterLeave, r.hoverAfterLeave === 0);
+        }
+    } else {
+        // Lanes on the page and no hover reading: the check skipped itself.
+        want('hoverRan', r.ganttAlignX === null, r.ganttAlignX);
+    }
     // K is a 620px-tall window, below the 768px the layout is designed for.
     // There the pane keeps its scroll as the documented safety valve, so the
     // form's lower edge is one small scroll away instead of on screen.

@@ -135,12 +135,25 @@
 
       <div class="gantt" id="gantt-chart">
         <div class="gantt__track" id="gantt-track">
+          <span class="gantt__label">CPU</span>
           <div class="gantt__row" id="gantt-bars"></div>
         </div>
       </div>
       <p class="empty-state" id="gantt-empty" role="status">Run or step the simulation to draw the chart.</p>
 
       <ul class="legend" id="gantt-legend" aria-label="Process colour legend"></ul>
+    </section>
+
+    <section class="panel panel--lanes" aria-labelledby="lanes-heading">
+      <div class="panel__head">
+        <h2 class="panel__heading" id="lanes-heading">Per-process Gantt</h2>
+        <!-- Decorative readout: the same numbers are in the Processes and Results
+             tables, so it stays out of the accessibility tree. -->
+        <p class="lane-readout" id="lane-readout" aria-hidden="true">Hover a lane for its numbers</p>
+      </div>
+
+      <div class="lanes" id="gantt-lanes" aria-label="Per-process Gantt lanes"></div>
+      <p class="empty-state" id="lanes-empty" role="status">Run or step the simulation to draw the lanes.</p>
     </section>
 
     </div>

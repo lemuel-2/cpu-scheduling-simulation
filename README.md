@@ -1,7 +1,8 @@
 # CPU Scheduling Simulator
 
 Interactive CPU scheduling simulator: FCFS, SJF, SRTF, Priority, and Round Robin,
-with a Gantt chart, ready-queue view, and per-process metrics.
+with a Gantt chart, per-process Gantt lanes, ready-queue view, and per-process
+metrics.
 
 ## Running
 
@@ -33,8 +34,8 @@ npx serve .
 
 ## Tests
 
-Pure scheduling logic and the Gantt slice builder are covered by Node's built-in
-test runner — no dependencies:
+Pure scheduling logic, the Gantt slice builder, the lane geometry, and the lane
+axis ticks are covered by Node's built-in test runner — no dependencies:
 
 ```sh
 node --test tests/test_scheduler.mjs tests/test_render.mjs

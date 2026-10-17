@@ -45,7 +45,6 @@
   --dur: 200ms;
   --dur-slow: 500ms;
 
-  --unit-size: 42px;
   --bar-height: 2.25rem;
 
   /* Process ramp: monochrome by design. Meaning is carried by the
@@ -317,6 +316,7 @@ body::before {
 .panel--controls { animation-delay: 50ms; }
 .panel--processes { animation-delay: 120ms; }
 .panel--gantt { animation-delay: 190ms; }
+.panel--lanes { animation-delay: 230ms; }
 .panel--queue { animation-delay: 260ms; }
 .panel--results { animation-delay: 330ms; }
 
@@ -709,7 +709,6 @@ body::before {
 
 /* ---------- Gantt ---------- */
 .gantt {
-  padding-bottom: var(--space-2);
   overflow-x: auto;
   overflow-y: hidden;
   background: var(--gray-50);
@@ -717,11 +716,33 @@ body::before {
   border-radius: var(--radius-md);
   transition: background-color var(--dur-slow) var(--ease), border-color var(--dur-slow) var(--ease);
 }
-.gantt__track { min-width: 100%; padding: var(--space-3); }
+/* The gutter matches .lane, so tick 0 of the CPU row sits directly above tick 0
+   of every lane in the panel below it. Without it the lanes are inset by their
+   label column and the column stops reading as one time axis. */
+.gantt__track {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  min-width: 100%;
+  padding: var(--space-3);
+}
+.gantt__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: var(--bar-height);
+  color: var(--text-meta);
+  text-align: right;
+}
 .gantt__row {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  position: relative;
+  /* No row gap: every gap shifts the slices after it right, and the lanes below
+     are placed as exact fractions of the run, so a gap walks the tail out of
+     line. The separator is a transparent border on the bar instead, which costs
+     the flex line no width (see .gantt__bar). */
+  gap: 0;
   min-height: calc(var(--bar-height) + 1.5rem);
 }
 .gantt__slice {
@@ -730,7 +751,12 @@ body::before {
   flex-grow: var(--units, 1);
   flex-shrink: 0;
   flex-basis: 0;
-  min-width: var(--unit-size);
+  /* No width floor: the lanes below are placed as exact fractions of the run,
+     so a floored slice would drift out of line with them. A narrow slice elides
+     its PID instead (see .gantt__bar). */
+  min-width: 0;
+  /* Lets a slice hide its own label when it is narrower than one. */
+  container-type: inline-size;
   gap: var(--space-1);
 }
 .gantt__bar {
@@ -739,6 +765,12 @@ body::before {
   justify-content: center;
   height: var(--bar-height);
   padding: 0 var(--space-1);
+  /* The gap between slices, drawn where it costs the flex line nothing: a
+     transparent border that the background does not paint under. Padding on the
+     slice would do the same visually but is counted into flex, which walks the
+     slices after it off the lanes below. */
+  border-right: 2px solid transparent;
+  background-clip: padding-box;
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -748,7 +780,8 @@ body::before {
   color: var(--process-fg, var(--ink));
   background-color: var(--process-bg, var(--gray-300));
   border-radius: var(--radius-xs);
-  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
 }
 .gantt__tick {
   font-family: var(--font-mono);
@@ -756,13 +789,128 @@ body::before {
   color: var(--text-meta);
   text-align: left;
 }
-.gantt__slice--end { flex-grow: 0; flex-basis: auto; min-width: 0; }
-.gantt__slice--end .gantt__tick { text-align: right; }
-.gantt__bar--empty { visibility: hidden; }
+/* The row ends where the run ends; the finish tick comes from the lane axis
+   below, at the same x. An end label of its own would take width out of the
+   pool the slices share and walk the row's scale off the lanes. */
 .gantt__slice--idle .gantt__bar--idle {
   color: var(--text-meta);
   background: transparent;
   border: 1px dashed var(--gray-300);
+}
+/* A slice can be narrower than the label it holds — a one-tick slice in a long
+   run is a few pixels — and the text would then spill across its neighbour. The
+   text goes transparent instead, which keeps the layout untouched. The axis
+   under the lanes carries the scale once this starts happening. */
+@container (max-width: 22px) {
+  .gantt__slice .gantt__bar { color: transparent; }
+}
+@container (max-width: 16px) {
+  .gantt__slice .gantt__tick { color: transparent; }
+}
+
+/* ---------- Per-process lanes ---------- */
+/* Its own panel below the Gantt chart, and its own box with the same inset as
+   .gantt__track: same 12px padding, gutter and gap, so the bars below still sit
+   on the CPU row's tick positions. The border is part of that — the Gantt box
+   has one, so this box must too or the columns differ by a pixel.
+   Each lane is a runway the width of the run and a bar is placed as a fraction
+   of it, so tick positions line up down the column. Bars carry no text: a
+   one-tick bar has no room for any, and the shared axis is what makes this
+   readable, so adding labels here would only reintroduce the eliding. */
+/* ponytail: exact fractions, no minimum bar width. A long run thins the bars
+   (about 3px per tick at 200 ticks) rather than letting them drift out of line
+   with the row above. Give the bars a floor only with an axis that scales too. */
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  overflow: hidden;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-slow) var(--ease), border-color var(--dur-slow) var(--ease);
+}
+.lane {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+.lane__name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-meta);
+  text-align: right;
+}
+.lane__track {
+  position: relative;
+  height: 14px;
+  background: var(--gray-100);
+  border-radius: var(--radius-xs);
+}
+.lane__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: var(--process-bg, var(--gray-300));
+  border-radius: var(--radius-xs);
+  transition: opacity var(--dur) var(--ease);
+}
+/* Axis row: same grid as a lane, so its ticks line up with the bars above it. */
+.lane--axis { margin-top: var(--space-1); }
+.lane__track--axis {
+  height: 1rem;
+  background: none;
+}
+.axis__tick {
+  position: absolute;
+  top: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-meta);
+}
+
+/* Readout in the lanes panel head. Always present, so hovering never changes
+   the panel's height. Decorative: the same numbers are in the tables. It holds
+   a line of its own: side by side with the heading it was elided to a stub
+   whenever the middle column narrowed (the drawer costs it half its width). */
+.lane-readout {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-meta);
+}
+
+/* ---------- Lane hover: one process lit across the page ---------- */
+/* Hovering a lane links one process: its CPU row slice, its row in both tables,
+   its ready-queue chip and its legend swatch all carry the same key. The other
+   bars step back so the lit one reads at a glance. Meaning still rides on the
+   PID label and the legend, never on colour alone. */
+body.has-hot .gantt__bar:not(.gantt__bar--idle),
+body.has-hot .lane__bar {
+  opacity: 0.3;
+}
+.gantt__slice.is-hot .gantt__bar,
+.lane.is-hot .lane__bar {
+  opacity: 1;
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+.lane.is-hot .lane__track { background: var(--gray-200); }
+.data-table tbody tr.is-hot { background: var(--gray-100); }
+.legend__item.is-hot .legend__swatch {
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+.queue__item.is-hot {
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
 }
 
 /* Per-process ramp mapping (JS sets data-process-index). */

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPU Scheduling Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="app-header">
+    <h1 class="app-header__title">CPU Scheduling Simulator</h1>
+    <button type="button" class="button app-header__theme-toggle" id="theme-toggle"
+            aria-pressed="false" aria-label="Switch to dark theme">
+      <span class="app-header__theme-icon" aria-hidden="true">&#9681;</span>
+      <span class="app-header__theme-text" id="theme-toggle-label">Dark</span>
+    </button>
+  </header>
+
+  <main class="app-shell" id="main-content">
+
+    <section class="panel panel--controls" aria-labelledby="controls-heading">
+      <h2 class="panel__heading" id="controls-heading">Controls</h2>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset__legend">Algorithm</legend>
+
+        <div class="field">
+          <label class="field__label" for="algorithm">Scheduling algorithm</label>
+          <select class="field__control" id="algorithm" name="algorithm">
+            <option value="fcfs">FCFS &mdash; First Come First Served</option>
+            <option value="sjf">SJF &mdash; Shortest Job First</option>
+            <option value="srtf">SRTF &mdash; Shortest Remaining Time First</option>
+            <option value="priority">Priority (non-preemptive)</option>
+            <option value="rr">Round Robin</option>
+          </select>
+        </div>
+
+        <div class="field is-hidden" id="quantum-field" data-state="hidden">
+          <label class="field__label" for="time-quantum">Time quantum</label>
+          <input class="field__control" id="time-quantum" name="time-quantum" type="number"
+                 min="1" step="1" value="2" inputmode="numeric" aria-describedby="quantum-hint">
+          <p class="field__hint" id="quantum-hint">Time slice length for Round Robin, in time units.</p>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label class="field__label" for="time-scrubber">Time</label>
+        <input type="range" class="scrubber" id="time-scrubber" min="0" max="0" value="0" step="1"
+               aria-valuetext="time 0">
+        <output class="readout" id="time-readout" for="time-scrubber" aria-live="polite">0</output>
+      </div>
+
+      <div class="button-row">
+        <button type="button" class="button button--primary" id="run-simulation">Run</button>
+        <button type="button" class="button" id="step-simulation">Step</button>
+        <button type="button" class="button" id="reset-simulation">Reset</button>
+        <button type="button" class="button button--danger" id="clear-all">Clear</button>
+      </div>
+
+      <p class="status-badge" id="simulation-status" role="status" aria-live="polite" data-state="idle">
+        <span class="status-badge__text">Idle</span>
+      </p>
+    </section>
+
+    <div class="pane pane--setup">
+
+    <section class="panel panel--processes" aria-labelledby="processes-heading">
+      <h2 class="panel__heading" id="processes-heading">Processes</h2>
+
+      <form class="process-form" id="process-form" novalidate>
+        <div class="field">
+          <label class="field__label" for="pid">PID</label>
+          <input class="field__control" id="pid" name="pid" type="text" autocomplete="off"
+                 placeholder="P1" aria-describedby="pid-error">
+          <p class="field__error is-hidden" id="pid-error" role="alert" data-state="hidden"></p>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="arrival-time">Arrival time</label>
+          <input class="field__control" id="arrival-time" name="arrival-time" type="number"
+                 min="0" step="1" inputmode="numeric" placeholder="0" aria-describedby="arrival-time-error">
+          <p class="field__error is-hidden" id="arrival-time-error" role="alert" data-state="hidden"></p>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="burst-time">Burst time</label>
+          <input class="field__control" id="burst-time" name="burst-time" type="number"
+                 min="1" step="1" inputmode="numeric" placeholder="1" aria-describedby="burst-time-error">
+          <p class="field__error is-hidden" id="burst-time-error" role="alert" data-state="hidden"></p>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="priority">Priority</label>
+          <input class="field__control" id="priority" name="priority" type="number"
+                 min="0" step="1" inputmode="numeric" placeholder="0"
+                 aria-describedby="priority-help priority-error">
+          <p class="field__hint" id="priority-help">Lower number runs first.</p>
+          <p class="field__error is-hidden" id="priority-error" role="alert" data-state="hidden"></p>
+        </div>
+
+        <button type="submit" class="button button--primary button--block" id="add-process">Add process</button>
+      </form>
+
+      <p class="form-error is-hidden" id="process-form-error" role="alert" aria-live="assertive" data-state="hidden"></p>
+
+      <div class="table-scroll">
+        <table class="data-table" id="process-table">
+          <caption class="data-table__caption">Added processes</caption>
+          <thead>
+            <tr>
+              <th scope="col">PID</th>
+              <th scope="col">Arrival</th>
+              <th scope="col">Burst</th>
+              <th scope="col">Priority</th>
+              <th scope="col" class="data-table__actions-head">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="process-table-body"></tbody>
+        </table>
+      </div>
+      <p class="empty-state" id="process-empty" role="status">No processes yet. Add one above to begin.</p>
+    </section>
+
+    </div>
+
+    <div class="pane pane--timeline">
+
+    <section class="panel panel--gantt" aria-labelledby="gantt-heading">
+      <h2 class="panel__heading" id="gantt-heading">Gantt chart</h2>
+
+      <div class="gantt" id="gantt-chart">
+        <div class="gantt__track" id="gantt-track">
+          <div class="gantt__row" id="gantt-bars"></div>
+        </div>
+      </div>
+      <p class="empty-state" id="gantt-empty" role="status">Run or step the simulation to draw the chart.</p>
+
+      <ul class="legend" id="gantt-legend" aria-label="Process colour legend"></ul>
+    </section>
+
+    </div>
+
+    <div class="pane pane--output">
+
+    <section class="panel panel--queue" aria-labelledby="queue-heading">
+      <h2 class="panel__heading" id="queue-heading">Ready queue</h2>
+      <p class="running" id="running-process"></p>
+      <ol class="queue" id="ready-queue" aria-label="Ready queue at current step"></ol>
+      <p class="empty-state" id="queue-empty" role="status">Queue is empty.</p>
+    </section>
+
+    <section class="panel panel--results" aria-labelledby="results-heading">
+      <div class="panel__head">
+        <h2 class="panel__heading" id="results-heading">Results</h2>
+        <p class="status-badge status-badge--quiet" id="results-summary" role="status" aria-live="polite">No results yet.</p>
+      </div>
+
+      <div class="averages">
+        <p class="averages__title" id="averages-title">Average</p>
+        <dl class="averages__list" id="results-averages" aria-labelledby="averages-title">
+          <div class="averages__item">
+            <dt class="averages__label">Completion</dt>
+            <dd class="averages__value" id="avg-completion">&ndash;</dd>
+          </div>
+          <div class="averages__item">
+            <dt class="averages__label">Turnaround</dt>
+            <dd class="averages__value" id="avg-turnaround">&ndash;</dd>
+          </div>
+          <div class="averages__item">
+            <dt class="averages__label">Waiting</dt>
+            <dd class="averages__value" id="avg-waiting">&ndash;</dd>
+          </div>
+          <div class="averages__item">
+            <dt class="averages__label">Response</dt>
+            <dd class="averages__value" id="avg-response">&ndash;</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="table-scroll">
+        <table class="data-table data-table--results" id="results-table">
+          <caption class="data-table__caption">Per-process scheduling metrics</caption>
+          <thead>
+            <tr>
+              <th scope="col">PID</th>
+              <th scope="col">Completion</th>
+              <th scope="col">Turnaround</th>
+              <th scope="col">Waiting</th>
+              <th scope="col">Response</th>
+            </tr>
+          </thead>
+          <tbody id="results-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    </div>
+
+    <section class="drawer" id="history-drawer" aria-labelledby="history-heading">
+      <div class="drawer__header">
+        <h2 class="panel__heading" id="history-heading">Queue history</h2>
+
+        <div class="drawer__actions">
+          <button type="button" class="button history__toggle" id="history-view-frames" aria-pressed="true">Frames</button>
+          <button type="button" class="button history__toggle" id="history-view-events" aria-pressed="false">Events</button>
+          <button type="button" class="button" id="history-toggle" aria-expanded="true" aria-controls="history-drawer">Collapse</button>
+        </div>
+      </div>
+
+      <div class="drawer__body">
+        <div id="history-frames-view">
+          <div class="table-scroll">
+            <table class="data-table" id="history-frames">
+              <caption class="data-table__caption">Ready queue by time</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">Running</th>
+                  <th scope="col">Ready queue</th>
+                  <th scope="col">Event</th>
+                </tr>
+              </thead>
+              <tbody id="history-frames-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="history-events-view" class="is-hidden">
+          <ol class="history__events" id="history-events" aria-label="Queue events"></ol>
+        </div>
+
+        <p class="empty-state" id="history-empty" role="status">Run or step to record queue history.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,919 @@
+/* ============================================================
+   CPU Scheduling Simulator - styles.css
+   Design language: bryl-minimal (github.com/bryllim/bryl-minimal-design)
+   Monochrome, typography-driven, halftone accent, full light/dark.
+   ============================================================ */
+
+/* ---------- Tokens ---------- */
+:root {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --ink: #0a0a0a;
+  --gray-50: #fafafa;
+  --gray-100: #f5f5f5;
+  --gray-200: #e9e9e9;
+  --gray-300: #d4d4d4;
+  --gray-400: #a3a3a3;
+  --gray-500: #737373;
+  --gray-600: #525252;
+  --gray-700: #404040;
+  --text-meta: #525252; /* secondary/meta text, AA on white (7.8:1) */
+
+  --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-display: "Geist Pixel", "Geist Mono", ui-monospace, monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 3.5rem;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-rest: 0 8px 22px -14px rgba(0, 0, 0, 0.25);
+  --shadow-hover: 0 18px 36px -20px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 40px 90px -20px rgba(0, 0, 0, 0.35);
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 200ms;
+  --dur-slow: 500ms;
+
+  --unit-size: 42px;
+  --bar-height: 2.25rem;
+
+  /* Process ramp: monochrome by design. Meaning is carried by the
+     PID label + legend, never by colour alone. */
+  --proc-0-bg: #0a0a0a; --proc-0-fg: #ffffff;
+  --proc-1-bg: #3f3f46; --proc-1-fg: #ffffff;
+  --proc-2-bg: #52525b; --proc-2-fg: #ffffff;
+  --proc-3-bg: #71717a; --proc-3-fg: #ffffff;
+  --proc-4-bg: #a1a1aa; --proc-4-fg: #0a0a0a;
+  --proc-5-bg: #d4d4d8; --proc-5-fg: #0a0a0a;
+  --proc-6-bg: #e4e4e7; --proc-6-fg: #0a0a0a;
+  --proc-7-bg: #f4f4f5; --proc-7-fg: #0a0a0a;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0c0c0f;
+  --ink: #f4f4f5;
+  --gray-50: #18181b;
+  --gray-100: #1e1e22;
+  --gray-200: #2a2a30;
+  --gray-300: #3a3a42;
+  --gray-400: #8a8a92;
+  --gray-500: #a0a0a8;
+  --gray-600: #c0c0c8;
+  --gray-700: #d8d8de;
+  --text-meta: #8a8a92; /* AA on #0c0c0f (5.6:1) */
+
+  --shadow-rest: none;
+  --shadow-hover: none;
+
+  --proc-0-bg: #f4f4f5; --proc-0-fg: #0a0a0a;
+  --proc-1-bg: #d4d4d8; --proc-1-fg: #0a0a0a;
+  --proc-2-bg: #a1a1aa; --proc-2-fg: #0a0a0a;
+  --proc-3-bg: #71717a; --proc-3-fg: #ffffff;
+  --proc-4-bg: #52525b; --proc-4-fg: #ffffff;
+  --proc-5-bg: #3f3f46; --proc-5-fg: #ffffff;
+  --proc-6-bg: #2a2a30; --proc-6-fg: #ffffff;
+  --proc-7-bg: #1e1e22; --proc-7-fg: #ffffff;
+}
+
+/* ---------- Base ---------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background-color: var(--bg);
+  transition: background-color var(--dur-slow) var(--ease), color var(--dur-slow) var(--ease);
+}
+
+::selection { background: var(--ink); color: var(--bg); }
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Halftone accent - fades out toward the top-right corner. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  color: var(--ink);
+  opacity: 0.05;
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 9px 9px;
+  -webkit-mask-image: radial-gradient(120% 80% at 100% 0%, #000 0%, transparent 60%);
+  mask-image: radial-gradient(120% 80% at 100% 0%, #000 0%, transparent 60%);
+}
+[data-theme="dark"] body::before { opacity: 0.16; }
+
+/* ---------- Utilities ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.is-hidden { display: none !important; }
+
+/* ---------- Skip link ---------- */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: var(--space-4);
+  z-index: 100;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--ink);
+  border-radius: var(--radius-xs);
+}
+.skip-link:focus { top: var(--space-3); }
+
+/* ---------- Header ---------- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--gray-200);
+  transition: background-color var(--dur-slow) var(--ease), border-color var(--dur-slow) var(--ease);
+}
+.app-header__title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.app-header__theme-icon { font-size: 1em; line-height: 1; }
+
+/* ---------- Layout: app shell ---------- */
+.app-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-4) var(--space-6);
+  counter-reset: panel;
+}
+
+/* Column stacks. Below 1024px the shell is a single scrolling column, so
+   panes grow with their content and never trap the page scroll. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Pinned three-column shell. Pane row takes the leftover height
+   (minmax(0,1fr) + min-height:0) so panes scroll internally; the drawer
+   row is auto. Only applies at >= 1024px. */
+@media (min-width: 1024px) {
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .app-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(320px, 440px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "controls controls controls"
+      "setup    timeline output"
+      "history  history  history";
+    padding: var(--space-4);
+    overflow: hidden;
+  }
+  .panel--controls { grid-area: controls; }
+  .pane--setup { grid-area: setup; }
+  .pane--timeline { grid-area: timeline; }
+  .pane--output { grid-area: output; }
+}
+
+/* ---------- History drawer ---------- */
+.drawer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-rest);
+}
+.drawer__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--gray-200);
+}
+.drawer__header .panel__heading { margin-bottom: 0; }
+.drawer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+.drawer__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow: auto;
+}
+.drawer.is-collapsed .drawer__body { display: none; }
+
+@media (min-width: 1024px) {
+  .drawer { grid-area: history; }
+  /* Pinned height only while expanded. The toolbar row above the panes comes
+     out of this budget, so the drawer is 20vh rather than 30vh; the floor
+     keeps it usable on short viewports. */
+  .drawer:not(.is-collapsed) {
+    height: 20vh;
+    min-height: 160px;
+  }
+}
+
+/* ---------- Panels (cards) ---------- */
+.panel {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: var(--space-5);
+  background: var(--bg);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-rest);
+  animation: rise 700ms var(--ease) backwards;
+  transition: box-shadow 350ms var(--ease), transform 420ms var(--ease),
+    background-color var(--dur-slow) var(--ease), border-color var(--dur-slow) var(--ease);
+}
+.panel:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+
+.panel__heading {
+  counter-increment: panel;
+  margin-bottom: var(--space-4);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray-500);
+}
+.panel__heading::before {
+  content: counter(panel, decimal-leading-zero) " \2014  ";
+  color: var(--text-meta);
+}
+
+.panel--controls { animation-delay: 50ms; }
+.panel--processes { animation-delay: 120ms; }
+.panel--gantt { animation-delay: 190ms; }
+.panel--queue { animation-delay: 260ms; }
+.panel--results { animation-delay: 330ms; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Fields ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+.field__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-meta);
+}
+.field__control {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+  transition: border-color var(--dur) var(--ease), background-color var(--dur-slow) var(--ease);
+}
+.field__control:hover { border-color: var(--gray-300); }
+.field__control::placeholder { color: var(--text-meta); opacity: 1; }
+.field__hint { font-size: 11px; color: var(--text-meta); }
+.field__error { font-family: var(--font-mono); font-size: 11px; color: var(--ink); }
+.field__error::before { content: "! "; font-weight: 600; }
+.field:has(.field__error:not(.is-hidden)) .field__control { border-color: var(--ink); }
+
+.fieldset { margin: 0; padding: 0; border: 0; }
+.fieldset__legend {
+  padding: 0;
+  margin-bottom: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-meta);
+}
+
+/* ---------- Buttons ---------- */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.button:hover { background: var(--gray-100); }
+.button:active { transform: translateY(1px); }
+.button[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+.button--primary {
+  color: var(--bg);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.button--primary:hover { background: var(--gray-700); border-color: var(--gray-700); }
+
+.button--block { width: 100%; }
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.app-header__theme-toggle {
+  background: var(--gray-50);
+  border-color: var(--gray-200);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Status badge ---------- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray-500);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-pill);
+  transition: border-color var(--dur) var(--ease), background-color var(--dur-slow) var(--ease);
+}
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gray-400);
+}
+.status-badge[data-state="running"]::before { background: var(--ink); animation: pulse 1.8s infinite; }
+.status-badge[data-state="finished"]::before { background: var(--ink); }
+.status-badge[data-state="error"]::before { background: var(--ink); }
+.status-badge--quiet { font-weight: 400; }
+
+/* ---------- Controls toolbar ---------- */
+/* At 1024px and wider the Controls section is a full-width toolbar row above
+   the panes, so Run, Step, the algorithm and the scrubber never scroll away.
+   Below 1024px it keeps its stacked panel layout. */
+@media (min-width: 1024px) {
+  .panel--controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+  /* One row at 1024px means the redundant labels leave the pixels while
+     staying in the accessibility tree: the fieldset keeps its legend and each
+     control keeps its label for assistive tech. The selected algorithm and the
+     time readout already say what they are. */
+  .panel--controls .panel__heading { margin-bottom: 0; }
+  .panel--controls .fieldset {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .panel--controls .fieldset__legend,
+  .panel--controls .field__label,
+  .panel--controls .field__hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .panel--controls .field {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: 0;
+  }
+  .panel--controls .field__control { width: auto; }
+  /* A number input's intrinsic width is about 180px, far more than a quantum
+     needs; capping it is what lets Round Robin keep one row at 1024. */
+  .panel--controls #time-quantum { width: 4rem; }
+  .panel--controls .field:has(.scrubber) { flex: 1 1 4rem; min-width: 0; }
+  .panel--controls .scrubber { width: auto; min-width: 0; flex: 1 1 6rem; }
+  /* The readout holds a value like "t = 12"; wrapping it would double the
+     toolbar's height. */
+  .panel--controls .readout {
+    margin-top: 0;
+    padding: var(--space-1) var(--space-2);
+    white-space: nowrap;
+  }
+  .panel--controls .button-row { margin: 0; }
+  .panel--controls .button { padding: var(--space-2); }
+  .panel--controls .status-badge { margin-left: auto; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* With the Controls toolbar gone, the left pane holds the Processes panel
+   alone. Heading and form hold their place; only the rows scroll. The pane
+   keeps its overflow as a safety valve for windows too short to fit the
+   panel. */
+@media (min-width: 1024px) {
+  .panel--processes {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .panel--processes > :not(.table-scroll) { flex: 0 0 auto; }
+  .panel--processes > .table-scroll {
+    flex: 1 1 auto;
+    min-height: 4rem;
+    overflow: auto;
+  }
+  /* With no processes the table header alone carries nothing the empty message
+     does not, and its floor would push the pane into scrolling. */
+  .panel--processes:has(#process-empty:not(.is-hidden)) > .table-scroll { display: none; }
+  #process-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+}
+
+/* ---------- Process form ---------- */
+/* The form sticks to the top of the pane, so Add process is always on
+   screen while the process list scrolls under it. */
+.process-form {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  background: var(--bg);
+}
+/* Grid gap owns the spacing; the stacked-field margin would double it. */
+.process-form .field { margin-bottom: 0; }
+.process-form .button--block { grid-column: 1 / -1; }
+
+.form-error {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-left: 2px solid var(--ink);
+  border-radius: var(--radius-xs);
+}
+.form-error::before { content: "! "; font-weight: 600; }
+
+/* ---------- Tables ---------- */
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+}
+.data-table {
+  width: 100%;
+  font-size: 13px;
+  background: var(--bg);
+  border-collapse: collapse;
+}
+.data-table__caption {
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-meta);
+}
+.data-table th,
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--gray-200);
+}
+.data-table thead th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-meta);
+  background: var(--gray-50);
+}
+.data-table tbody tr:hover { background: var(--gray-50); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tfoot th,
+.data-table tfoot td {
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--gray-50);
+  border-bottom: 0;
+}
+.data-table__actions-head,
+.data-table td.data-table__actions { text-align: right; }
+.data-table__numeric { font-family: var(--font-mono); }
+
+/* Metrics table: tighter cells so all five columns fit the narrow output
+   column, which keeps the table free of sideways scroll. */
+.data-table--results th,
+.data-table--results td { padding: var(--space-1) var(--space-2); }
+
+/* ---------- Results: pinned averages ---------- */
+/* The averages sit above the row list, outside its scroll area, so the
+   summary numbers never move while the rows scroll under them. One line
+   tall: the word "Average" labels the row, the four metrics share the rest. */
+.averages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+}
+.averages__title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-meta);
+}
+.averages__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr));
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  margin: 0;
+}
+.averages__item { min-width: 0; }
+.averages__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-meta);
+}
+.averages__value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* Heading and progress badge share one line, so the row list keeps the
+   height the badge would otherwise take. */
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.panel__head .panel__heading { margin-bottom: 0; }
+
+/* Pinned output pane: averages, summary and column headers hold their place
+   and only the row list scrolls, so a long run never forces the metrics to be
+   hunted for. The pane keeps its own scroll as a safety valve for windows too
+   short to fit the panel at all; it never clips. */
+@media (min-width: 1024px) {
+  .panel--results {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .panel--results > :not(.table-scroll) { flex: 0 0 auto; }
+  .panel--results .table-scroll {
+    flex: 1 1 auto;
+    /* ponytail: this floor is a compromise. Higher shows more rows when the
+       window is squeezed (drawer expanded on a 768px screen), lower risks the
+       pane scrollbar returning. It is the pane's scroll, not clipping, that
+       absorbs the difference. */
+    min-height: 4rem;
+    overflow: auto;
+  }
+  .data-table--results thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+}
+
+/* ---------- Gantt ---------- */
+.gantt {
+  padding-bottom: var(--space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-slow) var(--ease), border-color var(--dur-slow) var(--ease);
+}
+.gantt__track { min-width: 100%; padding: var(--space-3); }
+.gantt__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-height: calc(var(--bar-height) + 1.5rem);
+}
+.gantt__slice {
+  display: flex;
+  flex-direction: column;
+  flex-grow: var(--units, 1);
+  flex-shrink: 0;
+  flex-basis: 0;
+  min-width: var(--unit-size);
+  gap: var(--space-1);
+}
+.gantt__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--bar-height);
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--process-fg, var(--ink));
+  background-color: var(--process-bg, var(--gray-300));
+  border-radius: var(--radius-xs);
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.gantt__tick {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-meta);
+  text-align: left;
+}
+.gantt__slice--end { flex-grow: 0; flex-basis: auto; min-width: 0; }
+.gantt__slice--end .gantt__tick { text-align: right; }
+.gantt__bar--empty { visibility: hidden; }
+.gantt__slice--idle .gantt__bar--idle {
+  color: var(--text-meta);
+  background: transparent;
+  border: 1px dashed var(--gray-300);
+}
+
+/* Per-process ramp mapping (JS sets data-process-index). */
+[data-process-index="0"] { --process-bg: var(--proc-0-bg); --process-fg: var(--proc-0-fg); }
+[data-process-index="1"] { --process-bg: var(--proc-1-bg); --process-fg: var(--proc-1-fg); }
+[data-process-index="2"] { --process-bg: var(--proc-2-bg); --process-fg: var(--proc-2-fg); }
+[data-process-index="3"] { --process-bg: var(--proc-3-bg); --process-fg: var(--proc-3-fg); }
+[data-process-index="4"] { --process-bg: var(--proc-4-bg); --process-fg: var(--proc-4-fg); }
+[data-process-index="5"] { --process-bg: var(--proc-5-bg); --process-fg: var(--proc-5-fg); }
+[data-process-index="6"] { --process-bg: var(--proc-6-bg); --process-fg: var(--proc-6-fg); }
+[data-process-index="7"] { --process-bg: var(--proc-7-bg); --process-fg: var(--proc-7-fg); }
+
+/* ---------- Legend ---------- */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+.legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gray-500);
+}
+.legend__swatch {
+  width: 10px;
+  height: 10px;
+  background: var(--process-bg, var(--gray-300));
+  border: 1px solid var(--gray-200);
+  border-radius: 2px;
+}
+
+/* ---------- Ready queue ---------- */
+.queue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+.queue__item {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--process-fg, var(--ink));
+  background: var(--process-bg, var(--gray-200));
+  border-radius: var(--radius-pill);
+}
+
+/* ---------- Empty states ---------- */
+.empty-state {
+  margin-top: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-meta);
+}
+
+/* ---------- Running process (ready-queue split) ---------- */
+.running {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--ink);
+  border-radius: var(--radius-pill);
+}
+.running:empty { display: none; }
+
+.queue__item--running {
+  outline: 1px dashed var(--ink);
+  outline-offset: 1px;
+}
+
+/* ---------- History panel ---------- */
+.history__toggle[aria-pressed="true"] {
+  color: var(--bg);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.history__toggle[aria-pressed="true"]:hover {
+  background: var(--gray-700);
+  border-color: var(--gray-700);
+}
+
+#history-frames-view { min-width: 0; }
+
+.history__row { cursor: pointer; }
+.history__row:hover { background: var(--gray-100); }
+.history__row:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+.history__events {
+  max-height: 18rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.history__events > li {
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-bottom: 1px solid var(--gray-200);
+}
+.history__events > li:last-child { border-bottom: 0; }
+
+/* ---------- Time scrubber ---------- */
+.scrubber {
+  width: 100%;
+  min-width: 0;
+  height: 1.5rem;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.readout {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-xs);
+}
+
+/* Gantt bar cut off at the cursor */
+.gantt__slice--partial .gantt__bar {
+  border-right: 2px dashed var(--ink);
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* ---------- Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

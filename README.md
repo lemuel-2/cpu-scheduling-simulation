@@ -5,7 +5,7 @@ with a Gantt chart, ready-queue view, and per-process metrics.
 
 ## Running
 
-The page loads `app.js` as an ES module, so it must be served over HTTP —
+The page loads `frontend/app.js` as an ES module, so it must be served over HTTP —
 opening `index.html` directly from disk (`file://`) will not work, because the
 browser blocks module scripts on a `null` origin.
 
@@ -37,7 +37,7 @@ Pure scheduling logic and the Gantt slice builder are covered by Node's built-in
 test runner — no dependencies:
 
 ```sh
-node --test test_scheduler.mjs test_render.mjs
+node --test tests/test_scheduler.mjs tests/test_render.mjs
 ```
 
 (The files use the `test_*.mjs` name, which Node's default `node --test`
@@ -46,7 +46,8 @@ glob does not pick up, so list them explicitly.)
 ## Files
 
 - `index.html` — markup.
-- `styles.css` — styling.
-- `engine.js` — scheduling engine (pure, DOM-free).
-- `app.js` — UI layer; imports `engine.js`.
-- `test_scheduler.mjs`, `test_render.mjs` — tests.
+- `frontend/styles.css` — styling.
+- `frontend/app.js` — UI layer; imports `logic/engine.js`.
+- `logic/engine.js` — scheduling engine (pure, DOM-free).
+- `tests/test_scheduler.mjs`, `tests/test_render.mjs` — tests.
+- `tools/measure-layout.mjs` — headless-Chrome layout harness.

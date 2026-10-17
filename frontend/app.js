@@ -6,7 +6,7 @@
    Every view renders "as of time t" from the sim's recorded history.
    ============================================================ */
 
-import { Simulation, ALGORITHM, validateProcess } from "./engine.js";
+import { Simulation, ALGORITHM, validateProcess } from "../logic/engine.js";
 
 const DASH = "\u2013";
 const PROC_COLORS = 8;

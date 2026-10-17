@@ -1,8 +1,8 @@
-// Self-check for the scheduler engine: node --test test_scheduler.mjs
+// Self-check for the scheduler engine: node --test tests/test_scheduler.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Simulation, ALGORITHM, MAX_VALUE, parseCount, validateProcess } from './engine.js';
-import { cursorSlices, statusForCursor, visibleResults, historyFrameRows } from './app.js';
+import { Simulation, ALGORITHM, MAX_VALUE, parseCount, validateProcess } from '../logic/engine.js';
+import { cursorSlices, statusForCursor, visibleResults, historyFrameRows } from '../frontend/app.js';
 const P = (id, arrival, burst, priority = 0) => ({ id, arrival, burst, priority });
 const run = (processes, algorithm, quantum = 2) => {
   const sim = new Simulation(processes, { algorithm, quantum });

@@ -1,7 +1,7 @@
-// Self-check for the Gantt slice builder: node --test test_render.mjs
+// Self-check for the Gantt slice builder: node --test tests/test_render.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildSlices } from './app.js';
+import { buildSlices } from '../frontend/app.js';
 
 test('buildSlices: leading idle before the first arrival', () => {
   const slices = buildSlices([{ pid: 'P1', start: 4, end: 6 }]);

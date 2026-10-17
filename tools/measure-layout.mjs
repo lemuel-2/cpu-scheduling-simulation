@@ -10,7 +10,7 @@
 //   node tools/measure-layout.mjs --keys      (report the Tab order instead)
 //
 // It needs Chrome at the path in CHROME, and Python on PATH for the static
-// server: the page imports app.js as a module, which file:// blocks.
+// server: the page imports frontend/app.js as a module, which file:// blocks.
 //
 // The page loads Geist from Google Fonts with display=swap, and Geist is
 // measurably wider than the fallback, so the harness waits for the font before
@@ -254,7 +254,7 @@ async function main() {
             let ready = false;
             for (let i = 0; i < 100 && !ready; i++) {
                 try {
-                    ready = await evaluate("import('./app.js').then(() => true)");
+                    ready = await evaluate("import('./frontend/app.js').then(() => true)");
                 } catch { /* module still loading */ }
                 if (!ready) await sleep(200);
             }

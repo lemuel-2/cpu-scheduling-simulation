@@ -10,18 +10,15 @@ The page loads `frontend/app.js` as an ES module, so it must be served over HTTP
 opening `index.html` directly from disk (`file://`) will not work, because the
 browser blocks module scripts on a `null` origin.
 
-Start a static server from this folder, then open the URL it prints:
+Run it with the **Live Preview** extension for VS Code:
 
-```sh
-python -m http.server 8000
-# then visit http://localhost:8000
-```
+1. Install the *Live Preview* extension (Microsoft).
+2. Open `index.html` and click the **Show Preview** icon in the editor title bar,
+   or right-click `index.html` in the Explorer and choose **Open with Live
+   Preview**. If the icon is hidden, run **Live Preview: Show Preview** from the
+   Command Palette.
 
-Alternatives that work the same way:
-
-```sh
-npx serve .
-```
+The extension serves the folder over `localhost`, so the ES modules load.
 
 ## How to use
 

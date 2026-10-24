@@ -10,6 +10,9 @@ import { Simulation, ALGORITHM, validateProcess } from "../logic/engine.js";
 
 const DASH = "\u2013";
 const PROC_COLORS = 8;
+/* Smallest width one time unit may get in the Gantt rows. A one-tick slice
+   still fits a short PID label, so no process loses its label. */
+const MIN_TICK_PX = 24;
 
 /**
  * Turn engine segments into a continuous slice list by filling idle gaps
@@ -430,6 +433,11 @@ function initUI() {
         const keyById = new Map(state.processes.map((process, index) => [process.id, index]));
         const colorById = new Map(state.processes.map((process, index) => [process.id, colorOf(index)]));
         const { total, rows } = laneRows(timeline, state.processes, state.cursor);
+        // One tick never gets narrower than a label: the two rows scroll when
+        // the run is long, rather than hiding PIDs on the narrow slices.
+        const runWidth = `${total * MIN_TICK_PX}px`;
+        bars.style.minWidth = runWidth;
+        if (lanes) lanes.style.setProperty("--run-width", runWidth);
 
         for (const slice of slices) {
             const attributes = {
@@ -749,6 +757,22 @@ function initUI() {
 
     const scrubber = $("#time-scrubber");
     if (scrubber) scrubber.addEventListener("input", (event) => setCursor(event.target.value));
+
+    // The CPU row and the lanes scroll as one: their sliders are two views of
+    // the same time axis, so a scroll in either moves the other by the same
+    // amount. Clamp to the shorter range so the lane gutter cannot outrun it.
+    const ganttScroll = $(".gantt__scroll");
+    const lanesScroll = $("#gantt-lanes");
+    if (ganttScroll && lanesScroll) {
+        const syncScroll = (source, target) => {
+            const max = Math.max(0, target.scrollWidth - target.clientWidth);
+            const at = Math.min(source.scrollLeft, max);
+            if (Math.abs(target.scrollLeft - at) > 1) target.scrollLeft = at;
+            if (Math.abs(source.scrollLeft - at) > 1) source.scrollLeft = at;
+        };
+        ganttScroll.addEventListener("scroll", () => syncScroll(ganttScroll, lanesScroll));
+        lanesScroll.addEventListener("scroll", () => syncScroll(lanesScroll, ganttScroll));
+    }
 
     // Hovering a lane lights that process everywhere else and names it in the
     // panel head. Delegated, and the whole lane row is the target, not the bar:

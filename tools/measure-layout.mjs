@@ -177,6 +177,34 @@ const PROBE = `(() => {
   out.ganttAlignX = gLane ? box(gLane).x - box(gRow).x : null;
   out.ganttAlignW = gLane ? box(gLane).w - box(gRow).w : null;
   out.ganttAxisTicks = gLane ? $('#gantt-lanes .lane__track--axis').children.length : 0;
+  // Every slice is at least one label wide, so a visible PID must not be
+  // transparent and the narrowest slice must clear the 24px tick floor.
+  const slices = [...document.querySelectorAll('#gantt-bars .gantt__slice')];
+  out.ganttMinSlice = slices.length ? Math.min(...slices.map((el) => box(el).w)) : null;
+  out.ganttLabelsHidden = [...document.querySelectorAll(
+    '#gantt-bars .gantt__slice:not(.gantt__slice--idle) .gantt__bar')]
+    .filter((el) => {
+      const rgba = getComputedStyle(el).color.match(/rgba?\\(([^)]+)\\)/);
+      if (!rgba) return false;
+      const parts = rgba[1].split(',').map(Number);
+      return parts.length > 3 && parts[3] === 0;
+    }).length;
+  // The two scroll views must move together. Drive the CPU row and read the
+  // lanes back, then return both to the start for the alignment probes.
+  const ganttScroll = $('.gantt__scroll');
+  out.scrollSync = null;
+  out.laneNameSticky = null;
+  if (ganttScroll && gLanesBox && ganttScroll.scrollWidth > ganttScroll.clientWidth) {
+    const firstName = $('#gantt-lanes .lane__name');
+    const nameX = firstName ? box(firstName).x : null;
+    ganttScroll.scrollLeft = 40;
+    out.scrollTarget = Math.round(ganttScroll.scrollLeft);
+    ganttScroll.dispatchEvent(new Event('scroll'));
+    out.scrollSync = Math.round(gLanesBox.scrollLeft);
+    out.laneNameSticky = firstName ? box(firstName).x - nameX : null;
+    ganttScroll.scrollLeft = 0;
+    ganttScroll.dispatchEvent(new Event('scroll'));
+  }
   // A process's lane bar must start where that same process's bar starts in the
   // CPU row, whatever the cursor is: one time axis, or the column lies.
   out.ganttBarOffsets = [...document.querySelectorAll('#gantt-lanes .lane')]
@@ -229,11 +257,18 @@ function check(r, c) {
     want('resultsColsCut', r.resultsColsCut.length === 0, r.resultsColsCut.join(','));
     want('averagesVisible', r.averagesVisible === true, r.averagesVisible);
     numeric('ganttOverflowX', r.ganttOverflowX, r.ganttOverflowX <= 0);
-    numeric('lanesOverflowX', r.lanesOverflowX, r.lanesOverflowX <= 0);
+    // The rows scroll by design once a run is long enough; the page itself must
+    // not. The alignment checks below still run at scroll position 0.
     if (r.ganttAlignX !== null) {
         numeric('ganttAlignX', r.ganttAlignX, Math.abs(r.ganttAlignX) <= 1);
         numeric('ganttAlignW', r.ganttAlignW, Math.abs(r.ganttAlignW) <= 1);
         want('ganttAxisTicks', r.ganttAxisTicks >= 2, r.ganttAxisTicks);
+        numeric('ganttMinSlice', r.ganttMinSlice, r.ganttMinSlice === null || r.ganttMinSlice >= 23);
+        numeric('ganttLabelsHidden', r.ganttLabelsHidden, r.ganttLabelsHidden === 0);
+        if (r.scrollSync !== null) {
+            numeric('scrollSync', r.scrollSync, Math.abs(r.scrollSync - r.scrollTarget) <= 1);
+            numeric('laneNameSticky', r.laneNameSticky, Math.abs(r.laneNameSticky) <= 1);
+        }
         const off = r.ganttBarOffsets.filter(([, dx]) => dx === null || Math.abs(dx) > 1);
         want('ganttBarOffsets', off.length === 0, off.map(([pid, dx]) => `${pid}:${dx}`).join(' '));
     }

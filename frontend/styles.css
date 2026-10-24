@@ -453,8 +453,13 @@ body::before {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2) var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+  /* The quantum label sits above the input, so the toolbar needs more room at
+     the top and less at the bottom. */
+  .panel--controls:has(#quantum-field:not(.is-hidden)) {
+    padding-block: 19px 8px;
   }
   /* One row at 1024px means the redundant labels leave the pixels while
      staying in the accessibility tree: the fieldset keeps its legend and each
@@ -478,6 +483,25 @@ body::before {
     clip: rect(0 0 0 0);
     white-space: nowrap;
     border: 0;
+  }
+  /* The quantum input is a bare number in the toolbar, so its label stays
+     visible above it. The label is out of flow: that keeps the input centred
+     with the other controls instead of sitting below them. */
+  .panel--controls #quantum-field {
+    position: relative;
+  }
+  .panel--controls #quantum-field .field__label {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 2px);
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+    line-height: 1;
   }
   .panel--controls .field {
     flex-direction: row;
@@ -734,6 +758,16 @@ body::before {
   color: var(--text-meta);
   text-align: right;
 }
+/* The row scrolls on its own so the CPU gutter stays put. Its min-width is set
+   from the run length in app.js: one tick never gets narrower than a PID label,
+   so every slice can carry its PID. */
+.gantt__scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-400) transparent;
+}
 .gantt__row {
   display: flex;
   align-items: flex-end;
@@ -797,13 +831,8 @@ body::before {
   background: transparent;
   border: 1px dashed var(--gray-300);
 }
-/* A slice can be narrower than the label it holds — a one-tick slice in a long
-   run is a few pixels — and the text would then spill across its neighbour. The
-   text goes transparent instead, which keeps the layout untouched. The axis
-   under the lanes carries the scale once this starts happening. */
-@container (max-width: 22px) {
-  .gantt__slice .gantt__bar { color: transparent; }
-}
+/* The row keeps one tick at least one label wide, so the PID stays visible;
+   only the small tick number may still be dropped when it would spill. */
 @container (max-width: 16px) {
   .gantt__slice .gantt__tick { color: transparent; }
 }
@@ -825,7 +854,10 @@ body::before {
   flex-direction: column;
   gap: 2px;
   padding: var(--space-3);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-400) transparent;
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-md);
@@ -836,8 +868,15 @@ body::before {
   grid-template-columns: 2.5rem minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
+  /* Same per-tick floor as the CPU row; the lane's name column adds to the
+     scroll width, so app.js keeps both scroll views in step. */
+  min-width: calc(2.5rem + var(--space-2) + var(--run-width, 0px));
 }
 .lane__name {
+  position: sticky;
+  left: var(--space-3);
+  z-index: 1;
+  background: var(--gray-50);
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-meta);

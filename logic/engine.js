@@ -72,6 +72,68 @@ const ERROR_MESSAGE = {
 };
 
 /**
+ * Clone one input process into the mutable record the scheduler steps.
+ * @param {object} process - caller-supplied process fields
+ * @param {number} index - position in the input list
+ * @returns {object} runtime process record
+ */
+function createProcessState(process, index) {
+    const burst = clampCount(process.burst, CONFIG.minBurst);
+    return {
+        ...process,
+        index,            // stable tie-breaker and UI identity
+        arrival: clampCount(process.arrival),
+        burst,
+        remaining: burst, // ticks still owed; reaches 0 at completion
+        start: null,      // first tick this process ran; null until dispatched
+        completion: null, // tick after its last run; null until finished
+        quantumUsed: 0,   // consecutive ticks in the current RR slice
+    };
+}
+
+/** @returns {{running:null, ready:number[], completed:number}} A fresh pre-tick state. */
+function initialState() {
+    return { running: null, ready: [], completed: 0 };
+}
+
+/**
+ * Decide the single UI label for one tick.
+ * A completion or quantum expiry labelled by #runTick wins; otherwise the first
+ * matching transition names the tick. `processes` is read only to resolve PIDs,
+ * so this helper has no side effects.
+ *
+ * @param {Array<object>} processes - runtime process records
+ * @param {{previous:number|null, running:number|null, admitted:number[],
+ *          event:string|null, pid:string|null}} tick - pre/post schedule owners,
+ *   the arrivals admitted this tick, and any label already decided
+ * @returns {{event:string|null, pid:string|null}}
+ */
+function labelForTick(processes, { previous, running, admitted, event, pid }) {
+    if (event !== null) return { event, pid };
+    if (running !== null && previous !== running) {
+        // 'dispatch' when the CPU was idle, 'preempt' when SRTF took it mid-burst.
+        return { event: previous === null ? 'dispatch' : 'preempt', pid: processes[running].id };
+    }
+    if (admitted.length > 0) {
+        return { event: 'arrive', pid: processes[admitted[admitted.length - 1]].id }; // newest arrival
+    }
+    if (running === null) return { event: 'idle', pid: null }; // nobody runnable this tick
+    return { event: null, pid: null };
+}
+
+/**
+ * One merged history frame: a state that held for ticks [start, end).
+ * @typedef {object} Frame
+ * @property {number} start
+ * @property {number} end
+ * @property {number|null} running
+ * @property {number[]} ready
+ * @property {number} completed
+ * @property {string|null} event
+ * @property {string|null} pid
+ */
+
+/**
  * Tick-based CPU scheduler. One `step()` advances the clock by one unit.
  * The same loop drives every algorithm; only the pick rule and whether a
  * running process may be preempted differ.
@@ -105,19 +167,7 @@ export class Simulation {
         // ponytail: cap arrival/burst again here, not only in parseCount. run()'s
         // tick bound is derived from them, so this is the guard that keeps the
         // engine itself unhangable when a caller passes raw numbers.
-        this.processes = processes.map((process, index) => {
-            const burst = clampCount(process.burst, CONFIG.minBurst);
-            return {
-                ...process,
-                index,            // stable tie-breaker and UI identity
-                arrival: clampCount(process.arrival),
-                burst,
-                remaining: burst, // ticks still owed; reaches 0 at completion
-                start: null,      // first tick this process ran; null until dispatched
-                completion: null, // tick after its last run; null until finished
-                quantumUsed: 0,   // consecutive ticks in the current RR slice
-            };
-        });
+        this.processes = processes.map(createProcessState);
 
         this.time = 0;
         this.current = null;
@@ -157,58 +207,16 @@ export class Simulation {
         // 2. Pick a process if the CPU is idle, or let SRTF preempt the running one.
         this.#schedule();
 
-        // 3. Whoever holds the CPU now consumes exactly one tick.
-        const ran = this.current;
-        let event = null; // one display label per tick, decided below
-        let pid = null;
+        // 3-4. Whoever holds the CPU now consumes exactly one tick, and may
+        // finish or lose the CPU to an expired quantum.
+        const running = this.current;
+        const outcome = this.#runTick(running);
 
-        if (ran !== null) {
-            const process = this.processes[ran];
-            // First tick on the CPU defines response time.
-            if (process.start === null) process.start = this.time;
-
-            process.remaining -= 1;
-            process.quantumUsed += 1;
-            // Merge into the previous segment when contiguous, so a 10-tick run
-            // stays one rectangle instead of ten.
-            this.#appendSegment(process.id, this.time, this.time + 1);
-
-            if (process.remaining === 0) {
-                // 4a. Finished: completion is the tick after the last one it ran.
-                process.completion = this.time + 1;
-                this.completed += 1;
-                this.current = null;
-                event = 'complete';
-                pid = process.id;
-            } else if (this.algorithm === ALGORITHM.RR && process.quantumUsed >= this.quantum) {
-                // 4b. RR quantum expired: requeue at the tail for the next slice.
-                process.quantumUsed = 0;
-                this.ready.push(this.current);
-                this.current = null;
-                event = 'quantum';
-                pid = process.id;
-            }
-        }
-
-        // 5. Completion and quantum expiry already set the label; otherwise label
-        // the tick by what transition happened, first matching rule wins.
-        if (event === null) {
-            if (previous !== null && ran !== null && previous !== ran) {
-                event = 'preempt'; // SRTF swapped the CPU to a shorter job
-                pid = this.processes[ran].id;
-            } else if (ran !== null && previous === null) {
-                event = 'dispatch'; // an idle CPU just picked up a process
-                pid = this.processes[ran].id;
-            } else if (admitted.length > 0) {
-                event = 'arrive'; // report the newest arrival of this tick
-                pid = this.processes[admitted[admitted.length - 1]].id;
-            } else if (ran === null) {
-                event = 'idle'; // nobody runnable this tick
-            }
-        }
+        // 5. Label the tick: an outcome label wins, else its transition does.
+        const label = labelForTick(this.processes, { previous, running, admitted, ...outcome });
 
         // 6. Snapshot the post-tick state, then move the clock.
-        this.#recordFrame(event, pid);
+        this.#recordFrame(label.event, label.pid);
         this.time += 1;
     }
 
@@ -217,14 +225,7 @@ export class Simulation {
      * @returns {boolean} True when the schedule completed.
      */
     run() {
-        // Upper bound on possible ticks:
-        //   totalBurst - every process must burn its whole burst, one tick each
-        //   maxArrival - worst case the CPU idles until the last arrival
-        //   length     - one tick of slack per process for bookkeeping
-        //   +1         - so an empty process list still exits on the first probe
-        const totalBurst = this.processes.reduce((sum, process) => sum + process.burst, 0);
-        const maxArrival = this.processes.reduce((max, process) => Math.max(max, process.arrival), 0);
-        const maxTicks = totalBurst + maxArrival + this.processes.length + 1;
+        const maxTicks = this.#maxTicks();
 
         let ticks = 0;
         while (!this.isDone && ticks < maxTicks) {
@@ -240,7 +241,7 @@ export class Simulation {
         return this.timeline; // consumed by the Gantt lane renderer in app.js
     }
 
-    /** @returns {import('./engine.js').Frame[]} Merged history frames covering ticks 0..time-1. */
+    /** @returns {Frame[]} Merged history frames covering ticks 0..time-1. */
     getHistory() {
         return this.history; // one entry per state change, not per tick
     }
@@ -255,11 +256,11 @@ export class Simulation {
     stateAt(t) {
         if (t <= 0 || this.history.length === 0) {
             // Before the first tick (or an unrun simulation): nothing has happened yet.
-            return { running: null, ready: [], completed: 0 };
+            return initialState();
         }
         const tick = Math.min(t, this.time) - 1; // past the end: clamp to the last tick
         const frame = this.history.find((candidate) => candidate.start <= tick && tick < candidate.end);
-        if (!frame) return { running: null, ready: [], completed: 0 };
+        if (!frame) return initialState();
         // Copy the ready array: callers must not mutate recorded history.
         return { running: frame.running, ready: [...frame.ready], completed: frame.completed };
     }
@@ -272,19 +273,21 @@ export class Simulation {
 
     /** @returns {Array<object>} Per-process metrics. */
     getStats() {
-        return this.processes.map((process) => {
-            const complete = process.completion !== null;
-            // Metrics stay null until they are defined for the process.
-            const turnaround = complete ? process.completion - process.arrival : null;
-            return {
-                id: process.id,
-                index: process.index,
-                completion: process.completion,
-                turnaround,
-                waiting: complete ? turnaround - process.burst : null,
-                response: process.start === null ? null : process.start - process.arrival,
-            };
-        });
+        return this.processes.map((process) => this.#metricsFor(process));
+    }
+
+    /**
+     * Upper bound on the ticks a completed run can need:
+     *   totalBurst - every process must burn its whole burst, one tick each
+     *   maxArrival - worst case the CPU idles until the last arrival
+     *   length     - one tick of slack per process for bookkeeping
+     *   +1         - so an empty process list still exits on the first probe
+     * @returns {number}
+     */
+    #maxTicks() {
+        const totalBurst = this.processes.reduce((sum, process) => sum + process.burst, 0);
+        const maxArrival = this.processes.reduce((max, process) => Math.max(max, process.arrival), 0);
+        return totalBurst + maxArrival + this.processes.length + 1;
     }
 
     /**
@@ -314,11 +317,7 @@ export class Simulation {
     #schedule() {
         if (this.current === null) {
             const pick = this.#pickBest();
-            if (pick !== null) {
-                this.#removeReady(pick);
-                this.processes[pick].quantumUsed = 0; // fresh slice on every dispatch
-                this.current = pick;
-            }
+            if (pick !== null) this.#dispatch(pick);
             return;
         }
 
@@ -327,11 +326,16 @@ export class Simulation {
         const pick = this.#pickBest();
         if (pick !== null && this.#isBetter(pick, this.current, 'remaining')) {
             // Preempt: the running process returns to the ready queue, not aside.
-            this.#removeReady(pick);
             this.ready.push(this.current);
-            this.processes[pick].quantumUsed = 0;
-            this.current = pick;
+            this.#dispatch(pick);
         }
+    }
+
+    /** Move `index` from the ready queue onto the CPU with a fresh quantum slice. */
+    #dispatch(index) {
+        this.#removeReady(index);
+        this.processes[index].quantumUsed = 0; // fresh slice on every dispatch
+        this.current = index;
     }
 
     /** @returns {number|null} Index of the process the algorithm would run now. */
@@ -390,6 +394,45 @@ export class Simulation {
     }
 
     /**
+     * Consume one tick on the process holding the CPU, if any: charge the tick,
+     * extend the run segment, then finish the process or expire the RR quantum.
+     * @param {number|null} running - index of the process on the CPU
+     * @returns {{event:string|null, pid:string|null}} A label only when this
+     *   method decided one (complete or quantum), otherwise nulls.
+     */
+    #runTick(running) {
+        if (running === null) return { event: null, pid: null };
+
+        const process = this.processes[running];
+        // First tick on the CPU defines response time.
+        if (process.start === null) process.start = this.time;
+
+        process.remaining -= 1;
+        process.quantumUsed += 1;
+        // Merge into the previous segment when contiguous, so a 10-tick run
+        // stays one rectangle instead of ten.
+        this.#appendSegment(process.id, this.time, this.time + 1);
+
+        if (process.remaining === 0) {
+            // Finished: completion is the tick after the last one it ran.
+            process.completion = this.time + 1;
+            this.completed += 1;
+            this.current = null;
+            return { event: 'complete', pid: process.id };
+        }
+
+        if (this.algorithm === ALGORITHM.RR && process.quantumUsed >= this.quantum) {
+            // RR quantum expired: requeue at the tail for the next slice.
+            process.quantumUsed = 0;
+            this.ready.push(running);
+            this.current = null;
+            return { event: 'quantum', pid: process.id };
+        }
+
+        return { event: null, pid: null };
+    }
+
+    /**
      * Append a tick, merging it into the previous segment when the PID matches and
      * time is contiguous. The lane renderer then draws one rectangle per run
      * instead of one per tick.
@@ -411,14 +454,8 @@ export class Simulation {
      * where a run started rather than its last transition.
      */
     #recordFrame(event, pid) {
-        const last = this.history[this.history.length - 1];
-        if (
-            last &&
-            last.running === this.current &&
-            last.completed === this.completed &&
-            sameIndices(last.ready, this.ready)
-        ) {
-            last.end = this.time + 1; // same state: just widen the last frame
+        if (this.#lastFrameMatchesCurrent()) {
+            this.history[this.history.length - 1].end = this.time + 1; // same state: widen it
             return;
         }
         this.history.push({
@@ -430,6 +467,35 @@ export class Simulation {
             event,                   // display label, see step()
             pid,
         });
+    }
+
+    /** @returns {boolean} True when the last frame already holds the current state. */
+    #lastFrameMatchesCurrent() {
+        const last = this.history[this.history.length - 1];
+        return (
+            last !== undefined &&
+            last.running === this.current &&
+            last.completed === this.completed &&
+            sameIndices(last.ready, this.ready)
+        );
+    }
+
+    /**
+     * Metrics for one process. Values stay null until they are defined.
+     * @returns {{id:string, index:number, completion:number|null,
+     *            turnaround:number|null, waiting:number|null, response:number|null}}
+     */
+    #metricsFor(process) {
+        const complete = process.completion !== null;
+        const turnaround = complete ? process.completion - process.arrival : null;
+        return {
+            id: process.id,
+            index: process.index,
+            completion: process.completion,
+            turnaround,
+            waiting: complete ? turnaround - process.burst : null,
+            response: process.start === null ? null : process.start - process.arrival,
+        };
     }
 }
 
@@ -459,6 +525,30 @@ function nextPid(processes) {
 }
 
 /**
+ * Resolve the submitted PID against the existing list.
+ * Blank means "you pick one", so it becomes the next free default; an existing
+ * PID is reported as an error. IDs compare case-insensitively.
+ * @returns {{id:string, error:string|null}}
+ */
+function resolvePid(rawPid, processes) {
+    const id = rawPid.trim();
+    if (id === '') return { id: nextPid(processes), error: null };
+    const taken = processes.some((process) => process.id.toLowerCase() === id.toLowerCase());
+    return { id, error: taken ? ERROR_MESSAGE.pidDuplicate : null };
+}
+
+/**
+ * Priority is optional: a blank field means CONFIG.minPriority.
+ * @returns {{value:number, error:string|null}}
+ */
+function resolvePriority(rawPriority) {
+    if (String(rawPriority).trim() === '') return { value: CONFIG.minPriority, error: null };
+    const parsed = parseCount(rawPriority);
+    if (!parsed.ok) return { value: CONFIG.minPriority, error: ERROR_MESSAGE.priorityInvalid };
+    return { value: parsed.value, error: null };
+}
+
+/**
  * Validate raw form values against the current process list.
  * Fields are independent: every invalid one gets its own error key (`pid`,
  * `arrival`, `burst`, `priority`) so the form can highlight each input.
@@ -469,13 +559,9 @@ function nextPid(processes) {
  */
 export function validateProcess(raw, processes) {
     const errors = {};
-    let id = raw.pid.trim();
 
-    if (id === '') {
-        id = nextPid(processes); // blank means "you pick one"
-    } else if (processes.some((process) => process.id.toLowerCase() === id.toLowerCase())) {
-        errors.pid = ERROR_MESSAGE.pidDuplicate;
-    }
+    const pid = resolvePid(raw.pid, processes);
+    if (pid.error !== null) errors.pid = pid.error;
 
     const arrival = parseCount(raw.arrival);
     if (!arrival.ok) errors.arrival = ERROR_MESSAGE.arrivalInvalid; // arrival 0 is valid
@@ -483,15 +569,11 @@ export function validateProcess(raw, processes) {
     const burst = parseCount(raw.burst);
     if (!burst.ok || burst.value < CONFIG.minBurst) errors.burst = ERROR_MESSAGE.burstInvalid; // burst 0 is not
 
-    let priority = CONFIG.minPriority;
-    if (String(raw.priority).trim() !== '') {
-        const parsed = parseCount(raw.priority);
-        if (!parsed.ok) errors.priority = ERROR_MESSAGE.priorityInvalid;
-        else priority = parsed.value;
-    }
+    const priority = resolvePriority(raw.priority);
+    if (priority.error !== null) errors.priority = priority.error;
 
     return {
         errors,
-        process: { id, arrival: arrival.value, burst: burst.value, priority },
+        process: { id: pid.id, arrival: arrival.value, burst: burst.value, priority: priority.value },
     };
 }

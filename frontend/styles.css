@@ -259,27 +259,114 @@ body::before {
 .drawer__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
   margin-left: auto;
 }
+.tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+}
+.tabs .button {
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-xs);
+}
+.results__tabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: var(--space-2);
+}
+.results__tabs .button { flex: 1 1 0; }
 .drawer__body {
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--space-4);
   overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
 }
+.drawer__body > [role="tabpanel"] { min-height: 0; }
+#processes-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#processes-view .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+#processes-view:has(#process-empty:not(.is-hidden)) .table-scroll { display: none; }
+#history-frames-view,
+#history-events-view { overflow: auto; }
+#history-frames-view:has(.history-empty:not(.is-hidden)) .table-scroll,
+#history-events-view:has(.history-empty:not(.is-hidden)) .history__events { display: none; }
+#processes-view:has(#process-empty:not(.is-hidden)),
+#history-frames-view:has(.history-empty:not(.is-hidden)),
+#history-events-view:has(.history-empty:not(.is-hidden)) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.drawer__body .empty-state {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--gray-50);
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-md);
+}
+#process-table .data-table__numeric { text-align: right; }
 .drawer.is-collapsed .drawer__body { display: none; }
 
 @media (min-width: 1024px) {
   .drawer { grid-area: history; }
   /* Pinned height only while expanded. The toolbar row above the panes comes
-     out of this budget, so the drawer is 20vh rather than 30vh; the floor
-     keeps it usable on short viewports. */
+     out of this budget; 28vh keeps several table rows readable without making
+     the Gantt and results panes unusable. */
   .drawer:not(.is-collapsed) {
-    height: 20vh;
+    height: 28vh;
     min-height: 160px;
   }
+  .drawer__body { padding: var(--space-3); }
+  /* The active tab names the table, and the caption's padding costs a row of
+     vertical space at short viewport heights. */
+  #process-table .data-table__caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  #process-table th,
+  #process-table td {
+    padding: 3px var(--space-2);
+    font-size: 12px;
+  }
+  #process-table thead th { font-size: 9px; }
+  #process-table .button {
+    min-height: 24px;
+    padding: 2px var(--space-2);
+    font-size: 10px;
+  }
+}
+
+/* Short windows cannot spare 28vh without hiding the results averages, so the
+   panel falls back to its old 20vh budget there. */
+@media (min-width: 1024px) and (max-height: 700px) {
+  .drawer:not(.is-collapsed) { height: 20vh; }
 }
 
 /* ---------- Panels (cards) ---------- */
@@ -316,7 +403,6 @@ body::before {
 .panel--controls { animation-delay: 50ms; }
 .panel--processes { animation-delay: 120ms; }
 .panel--gantt { animation-delay: 190ms; }
-.panel--lanes { animation-delay: 230ms; }
 .panel--queue { animation-delay: 260ms; }
 .panel--results { animation-delay: 330ms; }
 
@@ -520,14 +606,6 @@ body::before {
     min-height: 0;
   }
   .panel--processes > :not(.table-scroll) { flex: 0 0 auto; }
-  .panel--processes > .table-scroll {
-    flex: 1 1 auto;
-    min-height: 4rem;
-    overflow: auto;
-  }
-  /* With no processes the table header alone carries nothing the empty message
-     does not, and its floor would push the pane into scrolling. */
-  .panel--processes:has(#process-empty:not(.is-hidden)) > .table-scroll { display: none; }
   #process-table thead th {
     position: sticky;
     top: 0;
@@ -691,6 +769,16 @@ body::before {
     min-height: 0;
   }
   .panel--results > :not(.table-scroll) { flex: 0 0 auto; }
+  #results-averages-view { min-height: 0; }
+  #results-averages-view .averages { margin-bottom: 0; }
+  /* The table view owns the leftover height; the hidden averages panel does
+     not reserve a row. */
+  #results-table-view {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
   .panel--results .table-scroll {
     flex: 1 1 auto;
     /* ponytail: this floor is a compromise. Higher shows more rows when the
@@ -706,6 +794,32 @@ body::before {
     z-index: 1;
   }
 }
+
+/* 03 and 04 share one card. The CPU row and the per-process lanes are one time
+   axis, and the second card's padding, border and heading overhead pushed five
+   lanes past the center pane at 1024x768. The inner heading still increments the
+   panel counter, so the queue and results keep their 05 and 06 numbers. */
+.lanes-section {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--gray-200);
+}
+.lanes-section .panel__head {
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+/* Compact only the merged timeline card. The card is the height-critical part
+   of the three-column shell; the drawer and side columns keep their spacing. */
+@media (min-width: 1024px) {
+  .pane--timeline { gap: 0; }
+  .pane--timeline .panel { padding-block: var(--space-3); }
+  .panel--gantt > .panel__heading { margin-bottom: var(--space-2); }
+}
+.panel--gantt .legend {
+  gap: 2px var(--space-1);
+  margin-top: var(--space-2);
+}
+.panel--gantt .legend__item { gap: var(--space-1); }
 
 /* ---------- Gantt ---------- */
 .gantt {
@@ -725,7 +839,7 @@ body::before {
   align-items: start;
   gap: var(--space-2);
   min-width: 100%;
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
 }
 .gantt__label {
   font-family: var(--font-mono);
@@ -809,10 +923,10 @@ body::before {
 }
 
 /* ---------- Per-process lanes ---------- */
-/* Its own panel below the Gantt chart, and its own box with the same inset as
-   .gantt__track: same 12px padding, gutter and gap, so the bars below still sit
-   on the CPU row's tick positions. The border is part of that — the Gantt box
-   has one, so this box must too or the columns differ by a pixel.
+/* A section inside the Gantt panel, and its own box with the same inset as
+   .gantt__track: same horizontal padding, gutter and gap, so the bars below
+   still sit on the CPU row's tick positions. The border is part of that — the
+   Gantt box has one, so this box must too or the columns differ by a pixel.
    Each lane is a runway the width of the run and a bar is placed as a fraction
    of it, so tick positions line up down the column. Bars carry no text: a
    one-tick bar has no room for any, and the shared axis is what makes this
@@ -823,8 +937,8 @@ body::before {
 .lanes {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3);
+  gap: 1px;
+  padding: var(--space-1) var(--space-3);
   overflow: hidden;
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
@@ -836,6 +950,7 @@ body::before {
   grid-template-columns: 2.5rem minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
+  line-height: 1;
 }
 .lane__name {
   font-family: var(--font-mono);
@@ -845,7 +960,7 @@ body::before {
 }
 .lane__track {
   position: relative;
-  height: 14px;
+  height: 12px;
   background: var(--gray-100);
   border-radius: var(--radius-xs);
 }
@@ -858,9 +973,9 @@ body::before {
   transition: opacity var(--dur) var(--ease);
 }
 /* Axis row: same grid as a lane, so its ticks line up with the bars above it. */
-.lane--axis { margin-top: var(--space-1); }
+.lane--axis { margin-top: 2px; }
 .lane__track--axis {
-  height: 1rem;
+  height: 0.75rem;
   background: none;
 }
 .axis__tick {
@@ -996,13 +1111,13 @@ body.has-hot .lane__bar {
   outline-offset: 1px;
 }
 
-/* ---------- History panel ---------- */
-.history__toggle[aria-pressed="true"] {
+/* ---------- Tabs ---------- */
+.tabs .button[aria-selected="true"] {
   color: var(--bg);
   background: var(--ink);
   border-color: var(--ink);
 }
-.history__toggle[aria-pressed="true"]:hover {
+.tabs .button[aria-selected="true"]:hover {
   background: var(--gray-700);
   border-color: var(--gray-700);
 }
@@ -1014,10 +1129,8 @@ body.has-hot .lane__bar {
 .history__row:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 .history__events {
-  max-height: 18rem;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
   list-style: none;
 }
 .history__events > li {

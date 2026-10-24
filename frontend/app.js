@@ -196,7 +196,8 @@ function initUI() {
         quantum: 2,
         sim: null,                           // Simulation | null
         cursor: 0,                           // 0..sim.time
-        historyView: "frames",               // "frames" | "events"
+        historyView: "processes",             // "processes" | "frames" | "events"
+        resultsView: "averages",              // "averages" | "table"
     };
 
     const STATUS = $("#simulation-status");
@@ -360,7 +361,7 @@ function initUI() {
     }
 
     /* ---------- lane hover: one process, lit up everywhere ---------- */
-    const READOUT_HINT = "Hover a lane for its numbers";
+    const READOUT_HINT = "Hover a lane";
     let hotKey = null;
 
     /**
@@ -576,7 +577,7 @@ function initUI() {
     function renderHistory() {
         const history = state.sim ? state.sim.getHistory() : [];
         const has = history.length > 0;
-        show($("#history-empty"), !has);
+        for (const el of document.querySelectorAll(".history-empty")) show(el, !has);
 
         const framesBody = $("#history-frames-body");
         if (framesBody) {
@@ -640,13 +641,53 @@ function initUI() {
     }
 
     function syncHistoryView() {
-        const frames = state.historyView === "frames";
-        show($("#history-frames-view"), frames);
-        show($("#history-events-view"), !frames);
-        const framesBtn = $("#history-view-frames");
-        const eventsBtn = $("#history-view-events");
-        if (framesBtn) framesBtn.setAttribute("aria-pressed", String(frames));
-        if (eventsBtn) eventsBtn.setAttribute("aria-pressed", String(!frames));
+        const view = state.historyView;
+        show($("#processes-view"), view === "processes");
+        show($("#history-frames-view"), view === "frames");
+        show($("#history-events-view"), view === "events");
+
+        const tabs = [...document.querySelectorAll("#history-drawer [role=\"tab\"]")];
+        for (const tab of tabs) {
+            const selected = tab.id === `history-view-${view}`;
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+        }
+    }
+
+    function syncResultsView() {
+        const view = state.resultsView;
+        show($("#results-averages-view"), view === "averages");
+        show($("#results-table-view"), view === "table");
+
+        const tabs = [...document.querySelectorAll("#results-tablist [role=\"tab\"]")];
+        for (const tab of tabs) {
+            const selected = tab.id === `results-view-${view}`;
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+        }
+    }
+
+    function bindTabList(tablist, select) {
+        if (!tablist) return;
+        tablist.addEventListener("click", (event) => {
+            const tab = event.target.closest("[role=\"tab\"]");
+            if (!tab || !tablist.contains(tab)) return;
+            select(tab);
+        });
+        tablist.addEventListener("keydown", (event) => {
+            if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+            const tabs = [...tablist.querySelectorAll("[role=\"tab\"]")];
+            const index = tabs.indexOf(document.activeElement);
+            if (index === -1) return;
+            event.preventDefault();
+            let next = index;
+            if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+            else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+            else if (event.key === "Home") next = 0;
+            else next = tabs.length - 1;
+            tabs[next].click();
+            tabs[next].focus();
+        });
     }
 
     /* ---------- controls ---------- */
@@ -787,10 +828,14 @@ function initUI() {
         if (restored) restored.focus();
     });
 
-    const framesBtn = $("#history-view-frames");
-    if (framesBtn) framesBtn.addEventListener("click", () => { state.historyView = "frames"; syncHistoryView(); });
-    const eventsBtn = $("#history-view-events");
-    if (eventsBtn) eventsBtn.addEventListener("click", () => { state.historyView = "events"; syncHistoryView(); });
+    bindTabList($("#history-drawer [role=\"tablist\"]"), (tab) => {
+        state.historyView = tab.id.replace("history-view-", "");
+        syncHistoryView();
+    });
+    bindTabList($("#results-tablist"), (tab) => {
+        state.resultsView = tab.id.replace("results-view-", "");
+        syncResultsView();
+    });
 
     const historyToggle = $("#history-toggle");
     if (historyToggle) historyToggle.addEventListener("click", () => {
@@ -817,6 +862,7 @@ function initUI() {
     applyTheme(theme);
     syncQuantumField();
     syncHistoryView();
+    syncResultsView();
     renderProcesses();
     renderOutputs();
 }

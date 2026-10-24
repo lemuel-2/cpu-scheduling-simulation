@@ -10,9 +10,6 @@ import { Simulation, ALGORITHM, validateProcess } from "../logic/engine.js";
 
 const DASH = "\u2013";
 const PROC_COLORS = 8;
-/* Smallest width one time unit may get in the Gantt rows. A one-tick slice
-   still fits a short PID label, so no process loses its label. */
-const MIN_TICK_PX = 24;
 
 /**
  * Turn engine segments into a continuous slice list by filling idle gaps
@@ -199,7 +196,8 @@ function initUI() {
         quantum: 2,
         sim: null,                           // Simulation | null
         cursor: 0,                           // 0..sim.time
-        historyView: "frames",               // "frames" | "events"
+        historyView: "processes",             // "processes" | "frames" | "events"
+        resultsView: "averages",              // "averages" | "table"
     };
 
     const STATUS = $("#simulation-status");
@@ -363,7 +361,7 @@ function initUI() {
     }
 
     /* ---------- lane hover: one process, lit up everywhere ---------- */
-    const READOUT_HINT = "Hover a lane for its numbers";
+    const READOUT_HINT = "Hover a lane";
     let hotKey = null;
 
     /**
@@ -433,11 +431,9 @@ function initUI() {
         const keyById = new Map(state.processes.map((process, index) => [process.id, index]));
         const colorById = new Map(state.processes.map((process, index) => [process.id, colorOf(index)]));
         const { total, rows } = laneRows(timeline, state.processes, state.cursor);
-        // One tick never gets narrower than a label: the two rows scroll when
-        // the run is long, rather than hiding PIDs on the narrow slices.
-        const runWidth = `${total * MIN_TICK_PX}px`;
-        bars.style.minWidth = runWidth;
-        if (lanes) lanes.style.setProperty("--run-width", runWidth);
+        // The row fills the panel: every slice is flex-grown by its tick count,
+        // so the whole run fits at any width and each bar reads as its burst.
+        // A slice too narrow for its PID drops the text instead of spilling.
 
         for (const slice of slices) {
             const attributes = {
@@ -584,7 +580,7 @@ function initUI() {
     function renderHistory() {
         const history = state.sim ? state.sim.getHistory() : [];
         const has = history.length > 0;
-        show($("#history-empty"), !has);
+        for (const el of document.querySelectorAll(".history-empty")) show(el, !has);
 
         const framesBody = $("#history-frames-body");
         if (framesBody) {
@@ -648,13 +644,53 @@ function initUI() {
     }
 
     function syncHistoryView() {
-        const frames = state.historyView === "frames";
-        show($("#history-frames-view"), frames);
-        show($("#history-events-view"), !frames);
-        const framesBtn = $("#history-view-frames");
-        const eventsBtn = $("#history-view-events");
-        if (framesBtn) framesBtn.setAttribute("aria-pressed", String(frames));
-        if (eventsBtn) eventsBtn.setAttribute("aria-pressed", String(!frames));
+        const view = state.historyView;
+        show($("#processes-view"), view === "processes");
+        show($("#history-frames-view"), view === "frames");
+        show($("#history-events-view"), view === "events");
+
+        const tabs = [...document.querySelectorAll("#history-drawer [role=\"tab\"]")];
+        for (const tab of tabs) {
+            const selected = tab.id === `history-view-${view}`;
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+        }
+    }
+
+    function syncResultsView() {
+        const view = state.resultsView;
+        show($("#results-averages-view"), view === "averages");
+        show($("#results-table-view"), view === "table");
+
+        const tabs = [...document.querySelectorAll("#results-tablist [role=\"tab\"]")];
+        for (const tab of tabs) {
+            const selected = tab.id === `results-view-${view}`;
+            tab.setAttribute("aria-selected", String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+        }
+    }
+
+    function bindTabList(tablist, select) {
+        if (!tablist) return;
+        tablist.addEventListener("click", (event) => {
+            const tab = event.target.closest("[role=\"tab\"]");
+            if (!tab || !tablist.contains(tab)) return;
+            select(tab);
+        });
+        tablist.addEventListener("keydown", (event) => {
+            if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+            const tabs = [...tablist.querySelectorAll("[role=\"tab\"]")];
+            const index = tabs.indexOf(document.activeElement);
+            if (index === -1) return;
+            event.preventDefault();
+            let next = index;
+            if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+            else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+            else if (event.key === "Home") next = 0;
+            else next = tabs.length - 1;
+            tabs[next].click();
+            tabs[next].focus();
+        });
     }
 
     /* ---------- controls ---------- */
@@ -758,22 +794,6 @@ function initUI() {
     const scrubber = $("#time-scrubber");
     if (scrubber) scrubber.addEventListener("input", (event) => setCursor(event.target.value));
 
-    // The CPU row and the lanes scroll as one: their sliders are two views of
-    // the same time axis, so a scroll in either moves the other by the same
-    // amount. Clamp to the shorter range so the lane gutter cannot outrun it.
-    const ganttScroll = $(".gantt__scroll");
-    const lanesScroll = $("#gantt-lanes");
-    if (ganttScroll && lanesScroll) {
-        const syncScroll = (source, target) => {
-            const max = Math.max(0, target.scrollWidth - target.clientWidth);
-            const at = Math.min(source.scrollLeft, max);
-            if (Math.abs(target.scrollLeft - at) > 1) target.scrollLeft = at;
-            if (Math.abs(source.scrollLeft - at) > 1) source.scrollLeft = at;
-        };
-        ganttScroll.addEventListener("scroll", () => syncScroll(ganttScroll, lanesScroll));
-        lanesScroll.addEventListener("scroll", () => syncScroll(lanesScroll, ganttScroll));
-    }
-
     // Hovering a lane lights that process everywhere else and names it in the
     // panel head. Delegated, and the whole lane row is the target, not the bar:
     // a one-tick bar is a much smaller thing to hit.
@@ -811,10 +831,14 @@ function initUI() {
         if (restored) restored.focus();
     });
 
-    const framesBtn = $("#history-view-frames");
-    if (framesBtn) framesBtn.addEventListener("click", () => { state.historyView = "frames"; syncHistoryView(); });
-    const eventsBtn = $("#history-view-events");
-    if (eventsBtn) eventsBtn.addEventListener("click", () => { state.historyView = "events"; syncHistoryView(); });
+    bindTabList($("#history-drawer [role=\"tablist\"]"), (tab) => {
+        state.historyView = tab.id.replace("history-view-", "");
+        syncHistoryView();
+    });
+    bindTabList($("#results-tablist"), (tab) => {
+        state.resultsView = tab.id.replace("results-view-", "");
+        syncResultsView();
+    });
 
     const historyToggle = $("#history-toggle");
     if (historyToggle) historyToggle.addEventListener("click", () => {
@@ -841,6 +865,7 @@ function initUI() {
     applyTheme(theme);
     syncQuantumField();
     syncHistoryView();
+    syncResultsView();
     renderProcesses();
     renderOutputs();
 }

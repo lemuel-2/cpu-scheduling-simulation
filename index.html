@@ -107,23 +107,6 @@
       </form>
 
       <p class="form-error is-hidden" id="process-form-error" role="alert" aria-live="assertive" data-state="hidden"></p>
-
-      <div class="table-scroll">
-        <table class="data-table" id="process-table">
-          <caption class="data-table__caption">Added processes</caption>
-          <thead>
-            <tr>
-              <th scope="col">PID</th>
-              <th scope="col">Arrival</th>
-              <th scope="col">Burst</th>
-              <th scope="col">Priority</th>
-              <th scope="col" class="data-table__actions-head">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="process-table-body"></tbody>
-        </table>
-      </div>
-      <p class="empty-state" id="process-empty" role="status">No processes yet. Add one above to begin.</p>
     </section>
 
     </div>
@@ -144,18 +127,18 @@
       <p class="empty-state" id="gantt-empty" role="status">Run or step the simulation to draw the chart.</p>
 
       <ul class="legend" id="gantt-legend" aria-label="Process colour legend"></ul>
-    </section>
 
-    <section class="panel panel--lanes" aria-labelledby="lanes-heading">
-      <div class="panel__head">
-        <h2 class="panel__heading" id="lanes-heading">Per-process Gantt</h2>
-        <!-- Decorative readout: the same numbers are in the Processes and Results
-             tables, so it stays out of the accessibility tree. -->
-        <p class="lane-readout" id="lane-readout" aria-hidden="true">Hover a lane for its numbers</p>
-      </div>
+      <section class="lanes-section" aria-labelledby="lanes-heading">
+        <div class="panel__head">
+          <h2 class="panel__heading" id="lanes-heading">Per-process</h2>
+          <!-- Decorative readout: the same numbers are in the Processes and Results
+               tables, so it stays out of the accessibility tree. -->
+          <p class="lane-readout" id="lane-readout" aria-hidden="true">Hover a lane</p>
+        </div>
 
-      <div class="lanes" id="gantt-lanes" aria-label="Per-process Gantt lanes"></div>
-      <p class="empty-state" id="lanes-empty" role="status">Run or step the simulation to draw the lanes.</p>
+        <div class="lanes" id="gantt-lanes" aria-label="Per-process Gantt lanes"></div>
+        <p class="empty-state" id="lanes-empty" role="status">Run or step the simulation to draw the lanes.</p>
+      </section>
     </section>
 
     </div>
@@ -175,42 +158,51 @@
         <p class="status-badge status-badge--quiet" id="results-summary" role="status" aria-live="polite">No results yet.</p>
       </div>
 
-      <div class="averages">
-        <p class="averages__title" id="averages-title">Average</p>
-        <dl class="averages__list" id="results-averages" aria-labelledby="averages-title">
-          <div class="averages__item">
-            <dt class="averages__label">Completion</dt>
-            <dd class="averages__value" id="avg-completion">&ndash;</dd>
-          </div>
-          <div class="averages__item">
-            <dt class="averages__label">Turnaround</dt>
-            <dd class="averages__value" id="avg-turnaround">&ndash;</dd>
-          </div>
-          <div class="averages__item">
-            <dt class="averages__label">Waiting</dt>
-            <dd class="averages__value" id="avg-waiting">&ndash;</dd>
-          </div>
-          <div class="averages__item">
-            <dt class="averages__label">Response</dt>
-            <dd class="averages__value" id="avg-response">&ndash;</dd>
-          </div>
-        </dl>
+      <div class="tabs results__tabs" id="results-tablist" role="tablist" aria-label="Results views">
+        <button type="button" class="button" id="results-view-averages" role="tab" aria-selected="true" aria-controls="results-averages-view" tabindex="0">Averages</button>
+        <button type="button" class="button" id="results-view-table" role="tab" aria-selected="false" aria-controls="results-table-view" tabindex="-1">Table</button>
       </div>
 
-      <div class="table-scroll">
-        <table class="data-table data-table--results" id="results-table">
-          <caption class="data-table__caption">Per-process scheduling metrics</caption>
-          <thead>
-            <tr>
-              <th scope="col">PID</th>
-              <th scope="col">Completion</th>
-              <th scope="col">Turnaround</th>
-              <th scope="col">Waiting</th>
-              <th scope="col">Response</th>
-            </tr>
-          </thead>
-          <tbody id="results-table-body"></tbody>
-        </table>
+      <div id="results-averages-view" role="tabpanel" aria-labelledby="results-view-averages">
+        <div class="averages">
+          <p class="averages__title" id="averages-title">Average</p>
+          <dl class="averages__list" id="results-averages" aria-labelledby="averages-title">
+            <div class="averages__item">
+              <dt class="averages__label">Completion</dt>
+              <dd class="averages__value" id="avg-completion">&ndash;</dd>
+            </div>
+            <div class="averages__item">
+              <dt class="averages__label">Turnaround</dt>
+              <dd class="averages__value" id="avg-turnaround">&ndash;</dd>
+            </div>
+            <div class="averages__item">
+              <dt class="averages__label">Waiting</dt>
+              <dd class="averages__value" id="avg-waiting">&ndash;</dd>
+            </div>
+            <div class="averages__item">
+              <dt class="averages__label">Response</dt>
+              <dd class="averages__value" id="avg-response">&ndash;</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <div id="results-table-view" role="tabpanel" aria-labelledby="results-view-table" class="is-hidden">
+        <div class="table-scroll">
+          <table class="data-table data-table--results" id="results-table">
+            <caption class="data-table__caption">Per-process scheduling metrics</caption>
+            <thead>
+              <tr>
+                <th scope="col">PID</th>
+                <th scope="col">Completion</th>
+                <th scope="col">Turnaround</th>
+                <th scope="col">Waiting</th>
+                <th scope="col">Response</th>
+              </tr>
+            </thead>
+            <tbody id="results-table-body"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -218,17 +210,39 @@
 
     <section class="drawer" id="history-drawer" aria-labelledby="history-heading">
       <div class="drawer__header">
-        <h2 class="panel__heading" id="history-heading">Queue history</h2>
+        <h2 class="panel__heading" id="history-heading">Processes &amp; queue history</h2>
 
         <div class="drawer__actions">
-          <button type="button" class="button history__toggle" id="history-view-frames" aria-pressed="true">Frames</button>
-          <button type="button" class="button history__toggle" id="history-view-events" aria-pressed="false">Events</button>
+          <div class="tabs" role="tablist" aria-label="Processes and queue history">
+            <button type="button" class="button history__toggle" id="history-view-processes" role="tab" aria-selected="true" aria-controls="processes-view" tabindex="0">Processes</button>
+            <button type="button" class="button history__toggle" id="history-view-frames" role="tab" aria-selected="false" aria-controls="history-frames-view" tabindex="-1">Frames</button>
+            <button type="button" class="button history__toggle" id="history-view-events" role="tab" aria-selected="false" aria-controls="history-events-view" tabindex="-1">Events</button>
+          </div>
           <button type="button" class="button" id="history-toggle" aria-expanded="true" aria-controls="history-drawer">Collapse</button>
         </div>
       </div>
 
       <div class="drawer__body">
-        <div id="history-frames-view">
+        <div id="processes-view" role="tabpanel" aria-labelledby="history-view-processes">
+          <div class="table-scroll">
+            <table class="data-table" id="process-table">
+              <caption class="data-table__caption">Added processes</caption>
+              <thead>
+                <tr>
+                  <th scope="col">PID</th>
+                  <th scope="col" class="data-table__numeric">Arrival</th>
+                  <th scope="col" class="data-table__numeric">Burst</th>
+                  <th scope="col" class="data-table__numeric">Priority</th>
+                  <th scope="col" class="data-table__actions-head">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="process-table-body"></tbody>
+            </table>
+          </div>
+          <p class="empty-state" id="process-empty" role="status">No processes yet. Add one in Processes to begin.</p>
+        </div>
+
+        <div id="history-frames-view" role="tabpanel" aria-labelledby="history-view-frames" class="is-hidden">
           <div class="table-scroll">
             <table class="data-table" id="history-frames">
               <caption class="data-table__caption">Ready queue by time</caption>
@@ -243,13 +257,13 @@
               <tbody id="history-frames-body"></tbody>
             </table>
           </div>
+          <p class="empty-state history-empty is-hidden" id="history-empty" role="status">Run or step to record queue history.</p>
         </div>
 
-        <div id="history-events-view" class="is-hidden">
+        <div id="history-events-view" role="tabpanel" aria-labelledby="history-view-events" class="is-hidden">
           <ol class="history__events" id="history-events" aria-label="Queue events"></ol>
+          <p class="empty-state history-empty is-hidden" role="status">Run or step to record queue history.</p>
         </div>
-
-        <p class="empty-state" id="history-empty" role="status">Run or step to record queue history.</p>
       </div>
     </section>
 

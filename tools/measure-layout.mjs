@@ -7,6 +7,8 @@
 // Run it from cpu_scheduling_simulation:
 //   node tools/measure-layout.mjs
 //   node tools/measure-layout.mjs --shots="%TEMP%\cpusched"
+//   node tools/measure-layout.mjs --tab=events --shots="%TEMP%\cpusched"
+//   node tools/measure-layout.mjs --results-tab=table --shots="%TEMP%\cpusched"
 //   node tools/measure-layout.mjs --keys      (report the Tab order instead)
 //
 // It needs Chrome at the path in CHROME, and Python on PATH for the static
@@ -42,6 +44,10 @@ const KEEP_HOVER = process.argv.includes('--keep-hover');
 // Screenshot in a named theme. Both themes carry the design, so both are worth
 // a look; the toggle is idempotent per run, so the profile cannot drift.
 const THEME = (process.argv.find((a) => a.startsWith('--theme=')) || '').slice('--theme='.length) || null;
+// Screenshot one specific tab. Measurement still runs on the default view.
+const TAB = (process.argv.find((a) => a.startsWith('--tab=')) || '').slice('--tab='.length) || null;
+const RESULTS_TAB = (process.argv.find((a) => a.startsWith('--results-tab=')) || '')
+    .slice('--results-tab='.length) || null;
 
 // rows, algorithm, viewport, drawer state
 const CASES = [
@@ -57,6 +63,8 @@ const CASES = [
     { id: 'J', rows: 0, algorithm: 'fcfs', width: 1024, height: 768, shut: false },
     { id: 'K', rows: 6, algorithm: 'fcfs', width: 1024, height: 620, shut: false },
     { id: 'L', rows: 1, algorithm: 'fcfs', width: 1440, height: 900, shut: false },
+    // N covers the five-process case that filled the center pane past its edge.
+    { id: 'N', rows: 5, algorithm: 'fcfs', width: 1024, height: 768, shut: false },
     // M stops the cursor mid-run: the row and the lanes must still share a scale.
     { id: 'M', rows: 6, algorithm: 'fcfs', width: 1440, height: 900, shut: false, cursor: 9 },
 ];
@@ -151,71 +159,173 @@ const PROBE = `(() => {
   out.formPosition = getComputedStyle($('#process-form')).position;
   out.formVisible = form.y >= pr.y - 1 && form.bottom <= pr.bottom + 1;
   const firstRow = $('#process-table-body tr');
+  const procTable = $('#process-table');
+  const procScroll = procTable ? procTable.closest('.table-scroll') : null;
+  const procBox = procScroll ? box(procScroll) : null;
+  out.processTableInDrawer = !!$('#history-drawer #process-table');
   out.hasFirstRow = !!firstRow;
-  out.firstRowVisible = firstRow ? box(firstRow).bottom <= pr.bottom + 1 : null;
-  out.processHeaderVisible = out.hasFirstRow
-    ? box($('#process-table thead th')).bottom <= pr.bottom + 1 : null;
+  out.processRowVisible = procBox
+    ? [...document.querySelectorAll('#process-table-body tr')].some((row) => {
+      const b = box(row);
+      return b.y >= procBox.y - 1 && b.bottom <= procBox.bottom + 1;
+    })
+    : null;
+  out.processHeaderVisible = out.hasFirstRow && procBox
+    ? box($('#process-table thead th')).bottom <= procBox.bottom + 1 : null;
+  out.processTableWidth = procBox ? procBox.w : null;
+  // Tabs must expose one visible panel at a time and keep their selection
+  // stable while the user moves between the process list and queue history.
+  const panelVisible = (id) => {
+    const el = document.getElementById(id);
+    return !!el && !el.classList.contains('is-hidden') && el.getClientRects().length > 0;
+  };
+  const selectedTab = () => {
+    const tab = $('#history-drawer [role="tab"][aria-selected="true"]');
+    return tab ? tab.id : null;
+  };
+  const tabState = () => ({
+    selected: selectedTab(),
+    processes: panelVisible('processes-view'),
+    frames: panelVisible('history-frames-view'),
+    events: panelVisible('history-events-view'),
+  });
+  const tabProbe = { default: tabState() };
+  const clickTab = (id) => { const el = document.getElementById(id); if (el) el.click(); };
+  clickTab('history-view-frames');
+  tabProbe.frames = tabState();
+  clickTab('history-view-events');
+  tabProbe.events = tabState();
+  const eventList = document.getElementById('history-events');
+  const eventView = document.getElementById('history-events-view');
+  const eventBody = $('.drawer__body');
+  const scrolls = (el) => {
+    if (!el) return false;
+    return ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)
+      && el.scrollHeight > el.clientHeight + 1;
+  };
+  out.eventsScroll = {
+    view: scrolls(eventView),
+    list: scrolls(eventList),
+    body: scrolls(eventBody),
+    viewScroll: eventView ? eventView.scrollHeight - eventView.clientHeight : null,
+    listScroll: eventList ? eventList.scrollHeight - eventList.clientHeight : null,
+  };
+  clickTab('history-view-processes');
+  tabProbe.processes = tabState();
+  const tabList = $('#history-drawer [role="tablist"]');
+  const key = (k) => {
+    const tab = document.activeElement || $('#history-view-processes');
+    if (tab && typeof tab.dispatchEvent === 'function') {
+      tab.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+    }
+  };
+  if (tabList) {
+    $('#history-view-processes')?.focus();
+    key('ArrowRight');
+    tabProbe.arrowRight = tabState();
+    key('ArrowRight');
+    tabProbe.arrowRightTwice = tabState();
+    key('ArrowLeft');
+    tabProbe.arrowLeft = tabState();
+    key('Home');
+    tabProbe.home = tabState();
+  }
+  out.tabProbe = tabProbe;
+  out.tabRoles = [...document.querySelectorAll('#history-drawer [role="tab"]')]
+    .map((tab) => [tab.id, tab.getAttribute('aria-controls'), tab.getAttribute('tabindex')]);
+  out.tabPanelRoles = [...document.querySelectorAll('#history-drawer [role="tabpanel"]')]
+    .map((panel) => panel.id);
+  // Results tabs: averages and the per-process table are alternatives. The
+  // table measurements below run with the table selected, then restore the
+  // default averages view for the screenshot.
+  const resultsTabState = () => {
+    const tab = $('#results-tablist [role="tab"][aria-selected="true"]');
+    return {
+      selected: tab ? tab.id : null,
+      averages: panelVisible('results-averages-view'),
+      table: panelVisible('results-table-view'),
+    };
+  };
+  const resultsTabProbe = { default: resultsTabState() };
+  clickTab('results-view-table');
+  resultsTabProbe.table = resultsTabState();
+  const resultsTabList = $('#results-tablist');
+  if (resultsTabList) {
+    $('#results-view-averages')?.focus();
+    key('ArrowRight');
+    resultsTabProbe.arrowRight = resultsTabState();
+    $('#results-view-table')?.focus();
+    key('ArrowLeft');
+    resultsTabProbe.arrowLeft = resultsTabState();
+    $('#results-view-table')?.focus();
+    key('Home');
+    resultsTabProbe.home = resultsTabState();
+    $('#results-view-averages')?.focus();
+    key('End');
+    resultsTabProbe.end = resultsTabState();
+  }
+  clickTab('results-view-table');
+  out.resultsTabProbe = resultsTabProbe;
   const opane = $('.pane--output');
+  const timeline = $('.pane--timeline');
+  out.timelineOverflow = timeline ? timeline.scrollHeight - timeline.clientHeight : null;
   const ts = $('#results-table').closest('.table-scroll');
-  out.outputPaneOverflow = opane.scrollHeight - opane.clientHeight;
+  out.outputPaneOverflowTable = opane.scrollHeight - opane.clientHeight;
   out.resultsOverflowX = ts.scrollWidth - ts.clientWidth;
   const sr = box(ts);
   out.resultsColsCut = [...document.querySelectorAll('#results-table thead th')]
     .filter((th) => { const b = box(th); return b.x < sr.x - 1 || b.right > sr.right + 1; })
     .map((th) => th.textContent.trim());
+  clickTab('results-view-averages');
+  out.resultsTabProbe.averages = resultsTabState();
+  out.resultsTabRoles = [...document.querySelectorAll('#results-tablist [role="tab"]')]
+    .map((tab) => [tab.id, tab.getAttribute('aria-controls'), tab.getAttribute('tabindex')]);
+  out.resultsTabPanelRoles = [...document.querySelectorAll('.panel--results [role="tabpanel"]')]
+    .map((panel) => panel.id);
+  out.outputPaneOverflowAverages = opane.scrollHeight - opane.clientHeight;
+  out.outputPaneOverflow = Math.max(out.outputPaneOverflowTable, out.outputPaneOverflowAverages);
   out.averagesVisible = box($('#results-averages')).bottom <= box(opane).bottom + 1;
   out.pageOverflowX = document.documentElement.scrollWidth - innerWidth;
-  // The lanes share the CPU row's time axis: tick 0 of the first lane sits under
-  // tick 0 of the row and both tracks span the same width, or the column stops
-  // reading as one axis.
+  // The whole chart fits its panel: the CPU row and the lanes both place a bar
+  // by the run's fractions, so nothing scrolls and each width reads as its burst.
   const gantt = $('#gantt-chart');
-  const gRow = $('#gantt-bars');
-  const gLane = $('#gantt-lanes .lane__track');
-  out.ganttOverflowX = gantt.scrollWidth - gantt.clientWidth;
+  const ganttScroll = $('.gantt__scroll');
   const gLanesBox = $('#gantt-lanes');
+  out.ganttOverflowX = gantt.scrollWidth - gantt.clientWidth;
+  out.ganttScrollOverflowX = ganttScroll ? ganttScroll.scrollWidth - ganttScroll.clientWidth : 0;
   out.lanesOverflowX = gLanesBox ? gLanesBox.scrollWidth - gLanesBox.clientWidth : 0;
-  out.ganttAlignX = gLane ? box(gLane).x - box(gRow).x : null;
-  out.ganttAlignW = gLane ? box(gLane).w - box(gRow).w : null;
-  out.ganttAxisTicks = gLane ? $('#gantt-lanes .lane__track--axis').children.length : 0;
-  // Every slice is at least one label wide, so a visible PID must not be
-  // transparent and the narrowest slice must clear the 24px tick floor.
+  out.ganttAxisTicks = $('#gantt-lanes .lane__track--axis')?.children.length ?? 0;
   const slices = [...document.querySelectorAll('#gantt-bars .gantt__slice')];
-  out.ganttMinSlice = slices.length ? Math.min(...slices.map((el) => box(el).w)) : null;
-  out.ganttLabelsHidden = [...document.querySelectorAll(
-    '#gantt-bars .gantt__slice:not(.gantt__slice--idle) .gantt__bar')]
+  const unitsOf = (el) => Number(el.style.getPropertyValue('--units') || 1);
+  const totalUnits = slices.reduce((sum, el) => sum + unitsOf(el), 0);
+  const rowW = box($('#gantt-bars')).w;
+  out.ganttSliceFit = slices.map((el) => [unitsOf(el) / totalUnits, box(el).w / rowW]);
+  // A PID may only be hidden when its slice is too narrow to hold it; a visible
+  // label must not be clipped by its own bar.
+  out.ganttLabelSpill = [...document.querySelectorAll('#gantt-bars .gantt__slice .gantt__bar')]
     .filter((el) => {
       const rgba = getComputedStyle(el).color.match(/rgba?\\(([^)]+)\\)/);
-      if (!rgba) return false;
-      const parts = rgba[1].split(',').map(Number);
-      return parts.length > 3 && parts[3] === 0;
+      if (rgba) {
+        const parts = rgba[1].split(',').map(Number);
+        if (parts.length > 3 && parts[3] === 0) return false;
+      }
+      return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
     }).length;
-  // The two scroll views must move together. Drive the CPU row and read the
-  // lanes back, then return both to the start for the alignment probes.
-  const ganttScroll = $('.gantt__scroll');
-  out.scrollSync = null;
-  out.laneNameSticky = null;
-  if (ganttScroll && gLanesBox && ganttScroll.scrollWidth > ganttScroll.clientWidth) {
-    const firstName = $('#gantt-lanes .lane__name');
-    const nameX = firstName ? box(firstName).x : null;
-    ganttScroll.scrollLeft = 40;
-    out.scrollTarget = Math.round(ganttScroll.scrollLeft);
-    ganttScroll.dispatchEvent(new Event('scroll'));
-    out.scrollSync = Math.round(gLanesBox.scrollLeft);
-    out.laneNameSticky = firstName ? box(firstName).x - nameX : null;
-    ganttScroll.scrollLeft = 0;
-    ganttScroll.dispatchEvent(new Event('scroll'));
+  // Each lane bar is a fraction of the run, so the summed width of a process's
+  // bars must equal that process's share of the executed ticks. This is what
+  // "the bar width reads as its burst" means once the lanes stop scrolling.
+  const runUnits = new Map();
+  for (const slice of slices) {
+    const pid = slice.querySelector('.gantt__bar')?.textContent.trim();
+    if (!pid || pid === 'idle') continue;
+    runUnits.set(pid, (runUnits.get(pid) ?? 0) + unitsOf(slice));
   }
-  // A process's lane bar must start where that same process's bar starts in the
-  // CPU row, whatever the cursor is: one time axis, or the column lies.
-  out.ganttBarOffsets = [...document.querySelectorAll('#gantt-lanes .lane')]
-    .filter((lane) => lane.querySelector('.lane__bar'))
-    .map((lane) => {
-      const pid = lane.querySelector('.lane__name').textContent.trim();
-      const rowBar = [...document.querySelectorAll('#gantt-bars .gantt__bar')]
-        .find((bar) => bar.textContent.trim() === pid);
-      return [pid, rowBar ? Math.round(lane.querySelector('.lane__bar').getBoundingClientRect().left
-        - rowBar.getBoundingClientRect().left) : null];
-    });
+  out.laneFit = gLanesBox ? [...gLanesBox.querySelectorAll('.lane[data-process-key]')].map((lane) => {
+    const track = box(lane.querySelector('.lane__track'));
+    const width = [...lane.querySelectorAll('.lane__bar')].reduce((sum, bar) => sum + box(bar).w, 0);
+    const pid = lane.querySelector('.lane__name').textContent.trim();
+    return [pid, width / track.w, (runUnits.get(pid) ?? 0) / totalUnits];
+  }) : null;
   out.drawerShut = $('#history-drawer').classList.contains('is-collapsed');
   out.drawerH = box($('#history-drawer')).h;
   out.setup = window.__setup || null;
@@ -255,22 +365,23 @@ function check(r, c) {
     numeric('pageOverflowX', r.pageOverflowX, r.pageOverflowX <= 0);
     numeric('resultsOverflowX', r.resultsOverflowX, r.resultsOverflowX <= 0);
     want('resultsColsCut', r.resultsColsCut.length === 0, r.resultsColsCut.join(','));
-    want('averagesVisible', r.averagesVisible === true, r.averagesVisible);
+    // K is the short-window fallback: the output pane keeps its scroll there,
+    // so the averages can be one small scroll away like the form.
+    if (c.id !== 'K') want('averagesVisible', r.averagesVisible === true, r.averagesVisible);
     numeric('ganttOverflowX', r.ganttOverflowX, r.ganttOverflowX <= 0);
-    // The rows scroll by design once a run is long enough; the page itself must
-    // not. The alignment checks below still run at scroll position 0.
-    if (r.ganttAlignX !== null) {
-        numeric('ganttAlignX', r.ganttAlignX, Math.abs(r.ganttAlignX) <= 1);
-        numeric('ganttAlignW', r.ganttAlignW, Math.abs(r.ganttAlignW) <= 1);
+    // The whole chart fits: neither the CPU row nor the lanes may scroll, and
+    // every slice keeps its share of the run.
+    if (r.laneFit && r.laneFit.length > 0) {
+        numeric('ganttScrollOverflowX', r.ganttScrollOverflowX, r.ganttScrollOverflowX <= 0);
+        numeric('lanesOverflowX', r.lanesOverflowX, r.lanesOverflowX <= 0);
         want('ganttAxisTicks', r.ganttAxisTicks >= 2, r.ganttAxisTicks);
-        numeric('ganttMinSlice', r.ganttMinSlice, r.ganttMinSlice === null || r.ganttMinSlice >= 23);
-        numeric('ganttLabelsHidden', r.ganttLabelsHidden, r.ganttLabelsHidden === 0);
-        if (r.scrollSync !== null) {
-            numeric('scrollSync', r.scrollSync, Math.abs(r.scrollSync - r.scrollTarget) <= 1);
-            numeric('laneNameSticky', r.laneNameSticky, Math.abs(r.laneNameSticky) <= 1);
-        }
-        const off = r.ganttBarOffsets.filter(([, dx]) => dx === null || Math.abs(dx) > 1);
-        want('ganttBarOffsets', off.length === 0, off.map(([pid, dx]) => `${pid}:${dx}`).join(' '));
+        const fit = r.ganttSliceFit.filter(([want, got]) => Math.abs(got - want) > 0.02);
+        want('ganttSliceFit', fit.length === 0,
+            fit.map(([want, got]) => `${got.toFixed(3)}!=${want.toFixed(3)}`).join(' '));
+        numeric('ganttLabelSpill', r.ganttLabelSpill, r.ganttLabelSpill === 0);
+        const off = r.laneFit.filter(([, got, want]) => Math.abs(got - want) > 0.02);
+        want('laneBurstFit', off.length === 0,
+            off.map(([pid, got, want]) => `${pid}:${got.toFixed(3)}!=${want.toFixed(3)}`).join(' '));
     }
     if (r.hoverHotCount !== undefined) {
         want('hoverKeysMixed', r.hoverKeys.length === 1, r.hoverKeys.join(','));
@@ -282,22 +393,71 @@ function check(r, c) {
         }
     } else {
         // Lanes on the page and no hover reading: the check skipped itself.
-        want('hoverRan', r.ganttAlignX === null, r.ganttAlignX);
+        want('hoverRan', r.laneFit === null || r.laneFit.length === 0, r.laneFit);
     }
     // K is a 620px-tall window, below the 768px the layout is designed for.
     // There the pane keeps its scroll as the documented safety valve, so the
     // form's lower edge is one small scroll away instead of on screen.
     if (c.id !== 'K') want('formVisible', r.formVisible === true, r.formVisible);
     if (c.id !== 'K') numeric('leftPaneOverflow', r.leftPaneOverflow, r.leftPaneOverflow <= 0);
-    if (c.rows > 0) {
-        want('firstRowVisible', r.firstRowVisible === true, r.firstRowVisible);
+    want('processTableInDrawer', r.processTableInDrawer === true, r.processTableInDrawer);
+    if (c.rows > 0 && !c.shut) {
+        want('processRowVisible', r.processRowVisible === true, r.processRowVisible);
         want('processHeaderVisible', r.processHeaderVisible === true, r.processHeaderVisible);
+        numeric('processTableWidth', r.processTableWidth, r.processTableWidth >= 600);
     }
+    const tabIds = (r.tabRoles || []).map(([id]) => id).join(',');
+    want('tabRoles', tabIds === 'history-view-processes,history-view-frames,history-view-events', tabIds);
+    want('tabAria', (r.tabRoles || []).every(([, controls, index]) =>
+        controls && (index === '0' || index === '-1')), JSON.stringify(r.tabRoles));
+    const panelIds = (r.tabPanelRoles || []).join(',');
+    want('tabPanelRoles', panelIds === 'processes-view,history-frames-view,history-events-view', panelIds);
+    if (!c.shut) {
+        const tab = r.tabProbe || {};
+        const tabOk = (state, selected, shown) => state
+            && state.selected === selected
+            && ['processes', 'frames', 'events'].every((view) => state[view] === shown.includes(view));
+        want('tabDefault', tabOk(tab.default, 'history-view-processes', ['processes']), JSON.stringify(tab.default));
+        want('tabFrames', tabOk(tab.frames, 'history-view-frames', ['frames']), JSON.stringify(tab.frames));
+        want('tabEvents', tabOk(tab.events, 'history-view-events', ['events']), JSON.stringify(tab.events));
+        want('tabProcesses', tabOk(tab.processes, 'history-view-processes', ['processes']), JSON.stringify(tab.processes));
+        want('tabArrowRight', tabOk(tab.arrowRight, 'history-view-frames', ['frames']), JSON.stringify(tab.arrowRight));
+        want('tabArrowTwice', tabOk(tab.arrowRightTwice, 'history-view-events', ['events']), JSON.stringify(tab.arrowRightTwice));
+        want('tabArrowLeft', tabOk(tab.arrowLeft, 'history-view-frames', ['frames']), JSON.stringify(tab.arrowLeft));
+        want('tabHome', tabOk(tab.home, 'history-view-processes', ['processes']), JSON.stringify(tab.home));
+        const scrollers = ['view', 'list', 'body'].filter((key) => r.eventsScroll && r.eventsScroll[key]);
+        want('eventsSingleScrollbar', scrollers.length <= 1, JSON.stringify(r.eventsScroll));
+    }
+    const resultTabIds = (r.resultsTabRoles || []).map(([id]) => id).join(',');
+    want('resultsTabRoles', resultTabIds === 'results-view-averages,results-view-table', resultTabIds);
+    want('resultsTabAria', (r.resultsTabRoles || []).every(([, controls, index]) =>
+        controls && (index === '0' || index === '-1')), JSON.stringify(r.resultsTabRoles));
+    const resultPanelIds = (r.resultsTabPanelRoles || []).join(',');
+    want('resultsTabPanelRoles', resultPanelIds === 'results-averages-view,results-table-view', resultPanelIds);
+    const rtab = r.resultsTabProbe || {};
+    const resultTabOk = (state, selected, shown) => state
+        && state.selected === selected
+        && ['averages', 'table'].every((view) => state[view] === shown.includes(view));
+    want('resultsTabDefault', resultTabOk(rtab.default, 'results-view-averages', ['averages']), JSON.stringify(rtab.default));
+    want('resultsTabTable', resultTabOk(rtab.table, 'results-view-table', ['table']), JSON.stringify(rtab.table));
+    want('resultsTabAverages', resultTabOk(rtab.averages, 'results-view-averages', ['averages']), JSON.stringify(rtab.averages));
+    want('resultsTabArrowRight', resultTabOk(rtab.arrowRight, 'results-view-table', ['table']), JSON.stringify(rtab.arrowRight));
+    want('resultsTabArrowLeft', resultTabOk(rtab.arrowLeft, 'results-view-averages', ['averages']), JSON.stringify(rtab.arrowLeft));
+    want('resultsTabHome', resultTabOk(rtab.home, 'results-view-averages', ['averages']), JSON.stringify(rtab.home));
+    want('resultsTabEnd', resultTabOk(rtab.end, 'results-view-table', ['table']), JSON.stringify(rtab.end));
     if (c.id !== 'K' && c.id !== 'J') {
         numeric('outputPaneOverflow', r.outputPaneOverflow, r.outputPaneOverflow <= 0);
     }
+    // The merged 03/04 card holds six lanes at 1024x768; K is the short-window
+    // fallback and 20-row runs keep the pane scroll as a safety valve.
+    if (c.rows > 0 && c.rows <= 6 && c.height >= 768) {
+        numeric('timelineOverflow', r.timelineOverflow, r.timelineOverflow <= 0);
+    }
     if (!c.shut) {
-        const expected = Math.max(0.2 * c.height, 160);
+        // K is the short-window fallback: panel 07 keeps its 20vh budget there
+        // so the results averages stay on screen.
+        const ratio = c.height <= 700 ? 0.2 : 0.28;
+        const expected = Math.max(ratio * c.height, 160);
         numeric('drawerH', r.drawerH, Math.abs(r.drawerH - expected) <= 2);
     }
     return bad;
@@ -372,7 +532,10 @@ async function main() {
         };
 
         await reload();
-        await sleep(900); // let the 700ms rise animation finish
+        // The last panel starts after a 330ms stagger, then rises for 700ms.
+        // Leave a wide margin: a mid-rise transform adds a fractional offset
+        // that rounds the output pane one pixel into scroll.
+        await sleep(1500);
 
         // Wait for the webfont swap, capped so an offline run cannot hang here.
         const fontExpr = "Promise.race([document.fonts.ready,"
@@ -447,6 +610,13 @@ async function main() {
                 { width: c.width, height: c.height, deviceScaleFactor: 1, mobile: false });
             await sleep(250);
             const r = await evaluate(`${setupScript(c)}\n${PROBE}`);
+            if (TAB && SHOTS_DIR) {
+                await evaluate(`document.getElementById(${JSON.stringify(`history-view-${TAB}`)})?.click()`);
+            }
+            if (RESULTS_TAB && SHOTS_DIR) {
+                await evaluate(`document.getElementById(${JSON.stringify(`results-view-${RESULTS_TAB}`)})?.click()`);
+            }
+            if (SHOTS_DIR && (TAB || RESULTS_TAB)) await sleep(120);
             if (SHOTS_DIR) {
                 const shot = await send('Page.captureScreenshot', { format: 'png' });
                 writeFileSync(join(SHOTS_DIR, `${c.id}_${c.width}x${c.height}_rows${c.rows}.png`),

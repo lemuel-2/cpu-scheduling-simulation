@@ -259,27 +259,114 @@ body::before {
 .drawer__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
   margin-left: auto;
 }
+.tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+}
+.tabs .button {
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-xs);
+}
+.results__tabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: var(--space-2);
+}
+.results__tabs .button { flex: 1 1 0; }
 .drawer__body {
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--space-4);
   overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
 }
+.drawer__body > [role="tabpanel"] { min-height: 0; }
+#processes-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#processes-view .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+#processes-view:has(#process-empty:not(.is-hidden)) .table-scroll { display: none; }
+#history-frames-view,
+#history-events-view { overflow: auto; }
+#history-frames-view:has(.history-empty:not(.is-hidden)) .table-scroll,
+#history-events-view:has(.history-empty:not(.is-hidden)) .history__events { display: none; }
+#processes-view:has(#process-empty:not(.is-hidden)),
+#history-frames-view:has(.history-empty:not(.is-hidden)),
+#history-events-view:has(.history-empty:not(.is-hidden)) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.drawer__body .empty-state {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--gray-50);
+  border: 1px dashed var(--gray-300);
+  border-radius: var(--radius-md);
+}
+#process-table .data-table__numeric { text-align: right; }
 .drawer.is-collapsed .drawer__body { display: none; }
 
 @media (min-width: 1024px) {
   .drawer { grid-area: history; }
   /* Pinned height only while expanded. The toolbar row above the panes comes
-     out of this budget, so the drawer is 20vh rather than 30vh; the floor
-     keeps it usable on short viewports. */
+     out of this budget; 28vh keeps several table rows readable without making
+     the Gantt and results panes unusable. */
   .drawer:not(.is-collapsed) {
-    height: 20vh;
+    height: 28vh;
     min-height: 160px;
   }
+  .drawer__body { padding: var(--space-3); }
+  /* The active tab names the table, and the caption's padding costs a row of
+     vertical space at short viewport heights. */
+  #process-table .data-table__caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  #process-table th,
+  #process-table td {
+    padding: 3px var(--space-2);
+    font-size: 12px;
+  }
+  #process-table thead th { font-size: 9px; }
+  #process-table .button {
+    min-height: 24px;
+    padding: 2px var(--space-2);
+    font-size: 10px;
+  }
+}
+
+/* Short windows cannot spare 28vh without hiding the results averages, so the
+   panel falls back to its old 20vh budget there. */
+@media (min-width: 1024px) and (max-height: 700px) {
+  .drawer:not(.is-collapsed) { height: 20vh; }
 }
 
 /* ---------- Panels (cards) ---------- */
@@ -316,7 +403,6 @@ body::before {
 .panel--controls { animation-delay: 50ms; }
 .panel--processes { animation-delay: 120ms; }
 .panel--gantt { animation-delay: 190ms; }
-.panel--lanes { animation-delay: 230ms; }
 .panel--queue { animation-delay: 260ms; }
 .panel--results { animation-delay: 330ms; }
 
@@ -544,14 +630,6 @@ body::before {
     min-height: 0;
   }
   .panel--processes > :not(.table-scroll) { flex: 0 0 auto; }
-  .panel--processes > .table-scroll {
-    flex: 1 1 auto;
-    min-height: 4rem;
-    overflow: auto;
-  }
-  /* With no processes the table header alone carries nothing the empty message
-     does not, and its floor would push the pane into scrolling. */
-  .panel--processes:has(#process-empty:not(.is-hidden)) > .table-scroll { display: none; }
   #process-table thead th {
     position: sticky;
     top: 0;
@@ -715,6 +793,16 @@ body::before {
     min-height: 0;
   }
   .panel--results > :not(.table-scroll) { flex: 0 0 auto; }
+  #results-averages-view { min-height: 0; }
+  #results-averages-view .averages { margin-bottom: 0; }
+  /* The table view owns the leftover height; the hidden averages panel does
+     not reserve a row. */
+  #results-table-view {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
   .panel--results .table-scroll {
     flex: 1 1 auto;
     /* ponytail: this floor is a compromise. Higher shows more rows when the
@@ -730,6 +818,34 @@ body::before {
     z-index: 1;
   }
 }
+
+/* 03 and 04 share one card. The CPU row and the per-process lanes are one time
+   axis, and the second card's padding, border and heading overhead pushed five
+   lanes past the center pane at 1024x768. The inner heading still increments the
+   panel counter, so the queue and results keep their 05 and 06 numbers. */
+.lanes-section {
+  /* The border-top already separates the two rows; the margin was costing the
+     one-height-critical card its budget at 1024x768. */
+  margin-top: 0;
+  border-top: 1px solid var(--gray-200);
+}
+.lanes-section .panel__head {
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+/* Compact only the merged timeline card. The card is the height-critical part
+   of the three-column shell; the drawer and side columns keep their spacing. */
+@media (min-width: 1024px) {
+  .pane--timeline { gap: 0; }
+  .pane--timeline .panel { padding-block: var(--space-2); }
+  .panel--gantt > .panel__heading { margin-bottom: var(--space-2); }
+}
+.panel--gantt .legend {
+  gap: 2px var(--space-1);
+  margin-top: var(--space-1);
+}
+.panel--gantt .legend__item { gap: var(--space-1); }
 
 /* ---------- Gantt ---------- */
 .gantt {
@@ -749,7 +865,7 @@ body::before {
   align-items: start;
   gap: var(--space-2);
   min-width: 100%;
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
 }
 .gantt__label {
   font-family: var(--font-mono);
@@ -758,15 +874,11 @@ body::before {
   color: var(--text-meta);
   text-align: right;
 }
-/* The row scrolls on its own so the CPU gutter stays put. Its min-width is set
-   from the run length in app.js: one tick never gets narrower than a PID label,
-   so every slice can carry its PID. */
+/* The row fills the panel, so there is nothing to scroll: every slice keeps its
+   share of the run and the whole chart stays in view. */
 .gantt__scroll {
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
+  overflow: hidden;
 }
 .gantt__row {
   display: flex;
@@ -785,10 +897,12 @@ body::before {
   flex-grow: var(--units, 1);
   flex-shrink: 0;
   flex-basis: 0;
-  /* No width floor: the lanes below are placed as exact fractions of the run,
-     so a floored slice would drift out of line with them. A narrow slice elides
-     its PID instead (see .gantt__bar). */
+  /* No width floor: the row fills the panel, so a floored slice would push the
+     run past the edge. A narrow slice drops its PID instead (see .gantt__bar). */
   min-width: 0;
+  /* Clips a tick number that would otherwise spill past the last slice and
+     widen the row past the panel. */
+  overflow: hidden;
   /* Lets a slice hide its own label when it is narrower than one. */
   container-type: inline-size;
   gap: var(--space-1);
@@ -831,33 +945,31 @@ body::before {
   background: transparent;
   border: 1px dashed var(--gray-300);
 }
-/* The row keeps one tick at least one label wide, so the PID stays visible;
-   only the small tick number may still be dropped when it would spill. */
-@container (max-width: 16px) {
+/* A slice can be narrower than the label it holds once a long run is squeezed
+   into the panel. The text goes transparent instead, which keeps the layout
+   untouched; the shared axis below carries the scale at that point. */
+@container (max-width: 22px) {
+  .gantt__slice .gantt__bar { color: transparent; }
+}
+@container (max-width: 20px) {
   .gantt__slice .gantt__tick { color: transparent; }
 }
 
 /* ---------- Per-process lanes ---------- */
-/* Its own panel below the Gantt chart, and its own box with the same inset as
-   .gantt__track: same 12px padding, gutter and gap, so the bars below still sit
-   on the CPU row's tick positions. The border is part of that — the Gantt box
-   has one, so this box must too or the columns differ by a pixel.
-   Each lane is a runway the width of the run and a bar is placed as a fraction
-   of it, so tick positions line up down the column. Bars carry no text: a
-   one-tick bar has no room for any, and the shared axis is what makes this
-   readable, so adding labels here would only reintroduce the eliding. */
-/* ponytail: exact fractions, no minimum bar width. A long run thins the bars
-   (about 3px per tick at 200 ticks) rather than letting them drift out of line
-   with the row above. Give the bars a floor only with an axis that scales too. */
+/* A section inside the Gantt panel. Each lane is a runway the width of the
+   lanes box and a bar is placed as a fraction of the whole run, so a bar's
+   width reads as its burst. The box never scrolls: the CPU row above keeps
+   its per-tick floor and scrolls, while every lane bar stays in view. */
+/* ponytail: no minimum bar width. A long run thins the bars (about 3px per
+   tick at 200 ticks) instead of clipping them out of the box. */
 .lanes {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
+  gap: 1px;
+  padding: var(--space-1) var(--space-3);
+  /* The lanes fit their box: every process's bar stays in view, so there is
+     nothing to scroll and no second scrollbar to spend height on. */
+  overflow: hidden;
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-md);
@@ -868,14 +980,9 @@ body::before {
   grid-template-columns: 2.5rem minmax(0, 1fr);
   align-items: center;
   gap: var(--space-2);
-  /* Same per-tick floor as the CPU row; the lane's name column adds to the
-     scroll width, so app.js keeps both scroll views in step. */
-  min-width: calc(2.5rem + var(--space-2) + var(--run-width, 0px));
+  line-height: 1;
 }
 .lane__name {
-  position: sticky;
-  left: var(--space-3);
-  z-index: 1;
   background: var(--gray-50);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -884,7 +991,7 @@ body::before {
 }
 .lane__track {
   position: relative;
-  height: 14px;
+  height: 12px;
   background: var(--gray-100);
   border-radius: var(--radius-xs);
 }
@@ -897,9 +1004,9 @@ body::before {
   transition: opacity var(--dur) var(--ease);
 }
 /* Axis row: same grid as a lane, so its ticks line up with the bars above it. */
-.lane--axis { margin-top: var(--space-1); }
+.lane--axis { margin-top: 2px; }
 .lane__track--axis {
-  height: 1rem;
+  height: 0.75rem;
   background: none;
 }
 .axis__tick {
@@ -1035,13 +1142,13 @@ body.has-hot .lane__bar {
   outline-offset: 1px;
 }
 
-/* ---------- History panel ---------- */
-.history__toggle[aria-pressed="true"] {
+/* ---------- Tabs ---------- */
+.tabs .button[aria-selected="true"] {
   color: var(--bg);
   background: var(--ink);
   border-color: var(--ink);
 }
-.history__toggle[aria-pressed="true"]:hover {
+.tabs .button[aria-selected="true"]:hover {
   background: var(--gray-700);
   border-color: var(--gray-700);
 }
@@ -1053,10 +1160,8 @@ body.has-hot .lane__bar {
 .history__row:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 .history__events {
-  max-height: 18rem;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
   list-style: none;
 }
 .history__events > li {

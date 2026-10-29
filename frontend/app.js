@@ -1,4 +1,4 @@
-"use strict";
+
 
 /* ============================================================
    CPU Scheduling Simulator - app.js

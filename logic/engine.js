@@ -514,7 +514,7 @@ export function parseCount(value) {
  * Pick the next unused default PID, e.g. P1, P2 ... Comparison ignores case,
  * so a manually entered `p1` also blocks `P1`.
  */
-function nextPid(processes) {
+export function nextPid(processes) {
     const used = new Set(processes.map((process) => process.id.toLowerCase()));
     let number = 1;
     while (used.has(`p${number}`)) number += 1;

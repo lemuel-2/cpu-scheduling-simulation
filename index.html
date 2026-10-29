@@ -94,7 +94,7 @@
           <p class="field__error is-hidden" id="burst-time-error" role="alert" data-state="hidden"></p>
         </div>
 
-        <div class="field">
+        <div class="field" id="priority-field">
           <label class="field__label" for="priority">Priority</label>
           <input class="field__control" id="priority" name="priority" type="number"
                  min="0" step="1" inputmode="numeric" placeholder="0"
@@ -210,20 +210,15 @@
 
     <section class="drawer" id="history-drawer" aria-labelledby="history-heading">
       <div class="drawer__header">
-        <h2 class="panel__heading" id="history-heading">Processes &amp; queue history</h2>
+        <h2 class="panel__heading" id="history-heading">Added processes</h2>
 
         <div class="drawer__actions">
-          <div class="tabs" role="tablist" aria-label="Processes and queue history">
-            <button type="button" class="button history__toggle" id="history-view-processes" role="tab" aria-selected="true" aria-controls="processes-view" tabindex="0">Processes</button>
-            <button type="button" class="button history__toggle" id="history-view-frames" role="tab" aria-selected="false" aria-controls="history-frames-view" tabindex="-1">Frames</button>
-            <button type="button" class="button history__toggle" id="history-view-events" role="tab" aria-selected="false" aria-controls="history-events-view" tabindex="-1">Events</button>
-          </div>
           <button type="button" class="button" id="history-toggle" aria-expanded="true" aria-controls="history-drawer">Collapse</button>
         </div>
       </div>
 
       <div class="drawer__body">
-        <div id="processes-view" role="tabpanel" aria-labelledby="history-view-processes">
+        <div id="processes-view">
           <div class="table-scroll">
             <table class="data-table" id="process-table">
               <caption class="data-table__caption">Added processes</caption>
@@ -232,37 +227,14 @@
                   <th scope="col">PID</th>
                   <th scope="col" class="data-table__numeric">Arrival</th>
                   <th scope="col" class="data-table__numeric">Burst</th>
-                  <th scope="col" class="data-table__numeric">Priority</th>
-                  <th scope="col" class="data-table__actions-head">Actions</th>
+                  <th scope="col" class="data-table__numeric" data-column="priority">Priority</th>
+                  <th scope="col" class="data-table__actions-head" aria-label="Actions"></th>
                 </tr>
               </thead>
               <tbody id="process-table-body"></tbody>
             </table>
           </div>
           <p class="empty-state" id="process-empty" role="status">No processes yet. Add one in Processes to begin.</p>
-        </div>
-
-        <div id="history-frames-view" role="tabpanel" aria-labelledby="history-view-frames" class="is-hidden">
-          <div class="table-scroll">
-            <table class="data-table" id="history-frames">
-              <caption class="data-table__caption">Ready queue by time</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Time</th>
-                  <th scope="col">Running</th>
-                  <th scope="col">Ready queue</th>
-                  <th scope="col">Event</th>
-                </tr>
-              </thead>
-              <tbody id="history-frames-body"></tbody>
-            </table>
-          </div>
-          <p class="empty-state history-empty is-hidden" id="history-empty" role="status">Run or step to record queue history.</p>
-        </div>
-
-        <div id="history-events-view" role="tabpanel" aria-labelledby="history-view-events" class="is-hidden">
-          <ol class="history__events" id="history-events" aria-label="Queue events"></ol>
-          <p class="empty-state history-empty is-hidden" role="status">Run or step to record queue history.</p>
         </div>
       </div>
     </section>

@@ -6,7 +6,7 @@
    Every view renders "as of time t" from the sim's recorded history.
    ============================================================ */
 
-import { Simulation, ALGORITHM, validateProcess } from "../logic/engine.js";
+import { Simulation, ALGORITHM, validateProcess, nextPid } from "../logic/engine.js";
 
 const DASH = "\u2013";
 const PROC_COLORS = 8;
@@ -162,22 +162,6 @@ export function visibleResults(stats, cursor) {
     return stats.filter((row) => row.completion !== null && row.completion <= cursor);
 }
 
-/**
- * Frame history -> plain rows (index -> pid) for the frames table.
- * @param {Array<object>} history
- * @param {Array<{id:string}>} processes
- */
-export function historyFrameRows(history, processes) {
-    return history.map((frame) => ({
-        start: frame.start,
-        end: frame.end,
-        runningPid: frame.running === null ? null : processes[frame.running].id,
-        readyPids: frame.ready.map((index) => processes[index].id),
-        event: frame.event,
-        pid: frame.pid,
-    }));
-}
-
 /* engine error key -> form field id */
 const FIELD_FOR = {
     pid: "pid",
@@ -196,13 +180,14 @@ function initUI() {
         quantum: 2,
         sim: null,                           // Simulation | null
         cursor: 0,                           // 0..sim.time
-        historyView: "processes",             // "processes" | "frames" | "events"
         resultsView: "averages",              // "averages" | "table"
     };
 
     const STATUS = $("#simulation-status");
     const STATUS_TEXT = STATUS ? STATUS.querySelector(".status-badge__text") || STATUS : null;
     const QUANTUM_FIELD = $("#quantum-field");
+    const PRIORITY_FIELD = $("#priority-field");
+    const PRIORITY_HEAD = $("#process-table th[data-column=\"priority\"]");
     const FORM_ERROR = $("#process-form-error");
     const THEME_TOGGLE = $("#theme-toggle");
 
@@ -299,7 +284,7 @@ function initUI() {
                 pid: $("#pid").value,
                 arrival: $("#arrival-time").value,
                 burst: $("#burst-time").value,
-                priority: $("#priority").value,
+                priority: state.algorithm === ALGORITHM.PRIORITY ? $("#priority").value : "",
             },
             state.processes,
         );
@@ -352,12 +337,14 @@ function initUI() {
                 h("td", null, [process.id]),
                 h("td", { class: "data-table__numeric" }, [String(process.arrival)]),
                 h("td", { class: "data-table__numeric" }, [String(process.burst)]),
-                h("td", { class: "data-table__numeric" }, [String(process.priority)]),
+                h("td", { class: "data-table__numeric", "data-column": "priority" }, [String(process.priority)]),
                 h("td", { class: "data-table__actions" }, [remove]),
             ]));
         });
 
         show($("#process-empty"), state.processes.length === 0);
+        $("#pid").placeholder = nextPid(state.processes);
+        syncPriorityField();
     }
 
     /* ---------- lane hover: one process, lit up everywhere ---------- */
@@ -577,43 +564,6 @@ function initUI() {
             : "No results yet.");
     }
 
-    function renderHistory() {
-        const history = state.sim ? state.sim.getHistory() : [];
-        const has = history.length > 0;
-        for (const el of document.querySelectorAll(".history-empty")) show(el, !has);
-
-        const framesBody = $("#history-frames-body");
-        if (framesBody) {
-            framesBody.replaceChildren();
-            for (const row of historyFrameRows(history, state.processes)) {
-                // A frame covers ticks [start, end); stateAt(t) returns the frame that
-                // covers tick t-1, so the row's state is the one shown at cursor
-                // start + 1. Keying data-time by start would make clicking the row (and
-                // the scrubber at that time) show the *previous* frame instead.
-                framesBody.appendChild(h("tr", {
-                    class: "history__row", tabindex: "0", "data-time": String(row.start + 1),
-                }, [
-                    h("td", { class: "data-table__numeric" }, [`${row.start}\u2013${row.end - 1}`]),
-                    h("td", null, [row.runningPid || DASH]),
-                    h("td", null, [row.readyPids.length ? row.readyPids.join(", ") : DASH]),
-                    h("td", null, [row.event || DASH]),
-                ]));
-            }
-        }
-
-        const eventsList = $("#history-events");
-        if (eventsList) {
-            eventsList.replaceChildren();
-            for (const frame of history) {
-                if (frame.event === null) continue;
-                const at = frame.start + 1; // cursor time the event is observable at
-                eventsList.appendChild(h("li", {
-                    class: "history__row", tabindex: "0", "data-time": String(at),
-                }, [`t${frame.start} \u00b7 ${frame.event} \u00b7 ${frame.pid || DASH}`]));
-            }
-        }
-    }
-
     function renderScrubber() {
         const scrubber = $("#time-scrubber");
         const view = state.sim ? state.sim.stateAt(state.cursor) : { running: null };
@@ -638,23 +588,8 @@ function initUI() {
         renderGantt();
         renderQueue();
         renderResults();
-        renderHistory();
         renderScrubber();
         renderStatus();
-    }
-
-    function syncHistoryView() {
-        const view = state.historyView;
-        show($("#processes-view"), view === "processes");
-        show($("#history-frames-view"), view === "frames");
-        show($("#history-events-view"), view === "events");
-
-        const tabs = [...document.querySelectorAll("#history-drawer [role=\"tab\"]")];
-        for (const tab of tabs) {
-            const selected = tab.id === `history-view-${view}`;
-            tab.setAttribute("aria-selected", String(selected));
-            tab.tabIndex = selected ? 0 : -1;
-        }
     }
 
     function syncResultsView() {
@@ -746,6 +681,21 @@ function initUI() {
         }
     }
 
+    // Priority only matters for the priority algorithm, so hide its input and
+    // table column for every other algorithm. Hidden values are ignored.
+    function syncPriorityField() {
+        const visible = state.algorithm === ALGORITHM.PRIORITY;
+        show(PRIORITY_FIELD, visible);
+        show(PRIORITY_HEAD, visible);
+        for (const cell of document.querySelectorAll("#process-table-body td[data-column=\"priority\"]")) {
+            show(cell, visible);
+        }
+        if (!visible) {
+            $("#priority").value = "";
+            setFieldError("priority", "");
+        }
+    }
+
     function applyTheme(theme) {
         document.documentElement.dataset.theme = theme;
         const dark = theme === "dark";
@@ -759,6 +709,12 @@ function initUI() {
 
     /* ---------- wiring ---------- */
     $("#process-form").addEventListener("submit", addProcess);
+    // Enter in PID moves on to Arrival time instead of submitting the form.
+    $("#pid").addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        $("#arrival-time").focus();
+    });
     $("#run-simulation").addEventListener("click", run);
     $("#step-simulation").addEventListener("click", step);
     $("#reset-simulation").addEventListener("click", resetAll);
@@ -767,6 +723,7 @@ function initUI() {
     $("#algorithm").addEventListener("change", (event) => {
         state.algorithm = event.target.value;
         syncQuantumField();
+        syncPriorityField();
         rebuild();
         renderOutputs();
     });
@@ -806,35 +763,6 @@ function initUI() {
         lanesBox.addEventListener("mouseleave", () => setHot(null));
     }
 
-    // Any [data-time] element (frame row, event item) jumps the cursor.
-    document.addEventListener("click", (event) => {
-        const target = event.target.closest("[data-time]");
-        if (target) setCursor(target.dataset.time);
-    });
-
-    // ...and so does activating a focused one with the keyboard (its tabindex
-    // makes it reachable by Tab; Enter/Space mirrors the click). The re-render
-    // rebuilds the row list, so restore focus to the replacement row afterwards —
-    // otherwise the focused node is destroyed and focus falls to <body>, dumping
-    // the user back at the top of the tab order on every jump.
-    document.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        const target = event.target.closest("[data-time]");
-        if (!target) return;
-        event.preventDefault();
-        const time = target.dataset.time;
-        // The tbody / <ol> survive the re-render (only their children are replaced),
-        // so hold onto the container to find the replacement row.
-        const container = target.closest("#history-frames-body, #history-events");
-        setCursor(time);
-        const restored = container && container.querySelector(`[data-time="${time}"]`);
-        if (restored) restored.focus();
-    });
-
-    bindTabList($("#history-drawer [role=\"tablist\"]"), (tab) => {
-        state.historyView = tab.id.replace("history-view-", "");
-        syncHistoryView();
-    });
     bindTabList($("#results-tablist"), (tab) => {
         state.resultsView = tab.id.replace("results-view-", "");
         syncResultsView();
@@ -864,7 +792,7 @@ function initUI() {
 
     applyTheme(theme);
     syncQuantumField();
-    syncHistoryView();
+    syncPriorityField();
     syncResultsView();
     renderProcesses();
     renderOutputs();

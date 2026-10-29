@@ -7,7 +7,6 @@
 // Run it from cpu_scheduling_simulation:
 //   node tools/measure-layout.mjs
 //   node tools/measure-layout.mjs --shots="%TEMP%\cpusched"
-//   node tools/measure-layout.mjs --tab=events --shots="%TEMP%\cpusched"
 //   node tools/measure-layout.mjs --results-tab=table --shots="%TEMP%\cpusched"
 //   node tools/measure-layout.mjs --keys      (report the Tab order instead)
 //
@@ -45,7 +44,6 @@ const KEEP_HOVER = process.argv.includes('--keep-hover');
 // a look; the toggle is idempotent per run, so the profile cannot drift.
 const THEME = (process.argv.find((a) => a.startsWith('--theme=')) || '').slice('--theme='.length) || null;
 // Screenshot one specific tab. Measurement still runs on the default view.
-const TAB = (process.argv.find((a) => a.startsWith('--tab=')) || '').slice('--tab='.length) || null;
 const RESULTS_TAB = (process.argv.find((a) => a.startsWith('--results-tab=')) || '')
     .slice('--results-tab='.length) || null;
 
@@ -179,65 +177,16 @@ const PROBE = `(() => {
     const el = document.getElementById(id);
     return !!el && !el.classList.contains('is-hidden') && el.getClientRects().length > 0;
   };
-  const selectedTab = () => {
-    const tab = $('#history-drawer [role="tab"][aria-selected="true"]');
-    return tab ? tab.id : null;
-  };
-  const tabState = () => ({
-    selected: selectedTab(),
-    processes: panelVisible('processes-view'),
-    frames: panelVisible('history-frames-view'),
-    events: panelVisible('history-events-view'),
-  });
-  const tabProbe = { default: tabState() };
   const clickTab = (id) => { const el = document.getElementById(id); if (el) el.click(); };
-  clickTab('history-view-frames');
-  tabProbe.frames = tabState();
-  clickTab('history-view-events');
-  tabProbe.events = tabState();
-  const eventList = document.getElementById('history-events');
-  const eventView = document.getElementById('history-events-view');
-  const eventBody = $('.drawer__body');
-  const scrolls = (el) => {
-    if (!el) return false;
-    return ['auto', 'scroll'].includes(getComputedStyle(el).overflowY)
-      && el.scrollHeight > el.clientHeight + 1;
-  };
-  out.eventsScroll = {
-    view: scrolls(eventView),
-    list: scrolls(eventList),
-    body: scrolls(eventBody),
-    viewScroll: eventView ? eventView.scrollHeight - eventView.clientHeight : null,
-    listScroll: eventList ? eventList.scrollHeight - eventList.clientHeight : null,
-  };
-  clickTab('history-view-processes');
-  tabProbe.processes = tabState();
-  const tabList = $('#history-drawer [role="tablist"]');
+  // Results tabs: averages and the per-process table are alternatives. The
+  // table measurements below run with the table selected, then restore the
+  // default averages view for the screenshot.
   const key = (k) => {
-    const tab = document.activeElement || $('#history-view-processes');
+    const tab = document.activeElement;
     if (tab && typeof tab.dispatchEvent === 'function') {
       tab.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
     }
   };
-  if (tabList) {
-    $('#history-view-processes')?.focus();
-    key('ArrowRight');
-    tabProbe.arrowRight = tabState();
-    key('ArrowRight');
-    tabProbe.arrowRightTwice = tabState();
-    key('ArrowLeft');
-    tabProbe.arrowLeft = tabState();
-    key('Home');
-    tabProbe.home = tabState();
-  }
-  out.tabProbe = tabProbe;
-  out.tabRoles = [...document.querySelectorAll('#history-drawer [role="tab"]')]
-    .map((tab) => [tab.id, tab.getAttribute('aria-controls'), tab.getAttribute('tabindex')]);
-  out.tabPanelRoles = [...document.querySelectorAll('#history-drawer [role="tabpanel"]')]
-    .map((panel) => panel.id);
-  // Results tabs: averages and the per-process table are alternatives. The
-  // table measurements below run with the table selected, then restore the
-  // default averages view for the screenshot.
   const resultsTabState = () => {
     const tab = $('#results-tablist [role="tab"][aria-selected="true"]');
     return {
@@ -405,28 +354,6 @@ function check(r, c) {
         want('processRowVisible', r.processRowVisible === true, r.processRowVisible);
         want('processHeaderVisible', r.processHeaderVisible === true, r.processHeaderVisible);
         numeric('processTableWidth', r.processTableWidth, r.processTableWidth >= 600);
-    }
-    const tabIds = (r.tabRoles || []).map(([id]) => id).join(',');
-    want('tabRoles', tabIds === 'history-view-processes,history-view-frames,history-view-events', tabIds);
-    want('tabAria', (r.tabRoles || []).every(([, controls, index]) =>
-        controls && (index === '0' || index === '-1')), JSON.stringify(r.tabRoles));
-    const panelIds = (r.tabPanelRoles || []).join(',');
-    want('tabPanelRoles', panelIds === 'processes-view,history-frames-view,history-events-view', panelIds);
-    if (!c.shut) {
-        const tab = r.tabProbe || {};
-        const tabOk = (state, selected, shown) => state
-            && state.selected === selected
-            && ['processes', 'frames', 'events'].every((view) => state[view] === shown.includes(view));
-        want('tabDefault', tabOk(tab.default, 'history-view-processes', ['processes']), JSON.stringify(tab.default));
-        want('tabFrames', tabOk(tab.frames, 'history-view-frames', ['frames']), JSON.stringify(tab.frames));
-        want('tabEvents', tabOk(tab.events, 'history-view-events', ['events']), JSON.stringify(tab.events));
-        want('tabProcesses', tabOk(tab.processes, 'history-view-processes', ['processes']), JSON.stringify(tab.processes));
-        want('tabArrowRight', tabOk(tab.arrowRight, 'history-view-frames', ['frames']), JSON.stringify(tab.arrowRight));
-        want('tabArrowTwice', tabOk(tab.arrowRightTwice, 'history-view-events', ['events']), JSON.stringify(tab.arrowRightTwice));
-        want('tabArrowLeft', tabOk(tab.arrowLeft, 'history-view-frames', ['frames']), JSON.stringify(tab.arrowLeft));
-        want('tabHome', tabOk(tab.home, 'history-view-processes', ['processes']), JSON.stringify(tab.home));
-        const scrollers = ['view', 'list', 'body'].filter((key) => r.eventsScroll && r.eventsScroll[key]);
-        want('eventsSingleScrollbar', scrollers.length <= 1, JSON.stringify(r.eventsScroll));
     }
     const resultTabIds = (r.resultsTabRoles || []).map(([id]) => id).join(',');
     want('resultsTabRoles', resultTabIds === 'results-view-averages,results-view-table', resultTabIds);
@@ -610,13 +537,10 @@ async function main() {
                 { width: c.width, height: c.height, deviceScaleFactor: 1, mobile: false });
             await sleep(250);
             const r = await evaluate(`${setupScript(c)}\n${PROBE}`);
-            if (TAB && SHOTS_DIR) {
-                await evaluate(`document.getElementById(${JSON.stringify(`history-view-${TAB}`)})?.click()`);
-            }
             if (RESULTS_TAB && SHOTS_DIR) {
                 await evaluate(`document.getElementById(${JSON.stringify(`results-view-${RESULTS_TAB}`)})?.click()`);
             }
-            if (SHOTS_DIR && (TAB || RESULTS_TAB)) await sleep(120);
+            if (SHOTS_DIR && RESULTS_TAB) await sleep(120);
             if (SHOTS_DIR) {
                 const shot = await send('Page.captureScreenshot', { format: 'png' });
                 writeFileSync(join(SHOTS_DIR, `${c.id}_${c.width}x${c.height}_rows${c.rows}.png`),

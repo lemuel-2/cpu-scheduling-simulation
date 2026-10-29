@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Simulation, ALGORITHM, MAX_VALUE, parseCount, validateProcess } from '../logic/engine.js';
-import { cursorSlices, statusForCursor, visibleResults, historyFrameRows } from '../frontend/app.js';
+import { cursorSlices, statusForCursor, visibleResults } from '../frontend/app.js';
 const P = (id, arrival, burst, priority = 0) => ({ id, arrival, burst, priority });
 const run = (processes, algorithm, quantum = 2) => {
   const sim = new Simulation(processes, { algorithm, quantum });
@@ -224,15 +224,4 @@ test('visibleResults: only processes completed at or before the cursor', () => {
   assert.deepEqual(visibleResults(stats, 6).map((row) => row.index), [0, 1]);
 });
 
-test('historyFrameRows: maps indices to pids and keeps the tick range', () => {
-  const processes = [{ id: 'P1' }, { id: 'P2' }];
-  const history = [
-    { start: 0, end: 2, running: 0, ready: [1], completed: 0, event: 'dispatch', pid: 'P1' },
-    { start: 2, end: 3, running: null, ready: [], completed: 2, event: 'complete', pid: 'P2' },
-  ];
-  assert.deepEqual(historyFrameRows(history, processes), [
-    { start: 0, end: 2, runningPid: 'P1', readyPids: ['P2'], event: 'dispatch', pid: 'P1' },
-    { start: 2, end: 3, runningPid: null, readyPids: [], event: 'complete', pid: 'P2' },
-  ]);
-});
 
